@@ -1,0 +1,57 @@
+.login-page { min-height: 100vh; background: var(--bg); display: flex; flex-direction: column; }
+
+/* ---------- 品牌区 ---------- */
+.brand {
+  position: relative; overflow: hidden;
+  padding-bottom: 130rpx;
+  background: linear-gradient(160deg, #5B8CFF, #3A6BF0);
+}
+.brand-mask { position: absolute; border-radius: 50%; }
+.brand-mask.a {
+  width: 420rpx; height: 420rpx; right: -140rpx; top: -160rpx;
+  background: rgba(255, 255, 255, 0.12);
+}
+.brand-mask.b {
+  width: 260rpx; height: 260rpx; left: -100rpx; top: 60rpx;
+  background: rgba(255, 255, 255, 0.08);
+}
+.brand-inner { position: relative; text-align: center; color: #fff; }
+.logo { display: flex; align-items: flex-end; justify-content: center; height: 96rpx; }
+.logo-book { border-radius: 6rpx; background: rgba(255, 255, 255, 0.92); margin: 0 4rpx; }
+.logo-book.b1 { width: 20rpx; height: 62rpx; }
+.logo-book.b2 { width: 20rpx; height: 82rpx; }
+.logo-book.b3 { width: 20rpx; height: 70rpx; }
+.brand-title { font-size: 44rpx; font-weight: 700; margin-top: 26rpx; letter-spacing: 2rpx; }
+.brand-sub { font-size: 22rpx; opacity: 0.85; margin-top: 12rpx; letter-spacing: 1rpx; }
+
+/* ---------- 登录卡片 ---------- */
+.login-card {
+  margin: -90rpx 40rpx 0; position: relative;
+  background: #fff; border-radius: 28rpx;
+  padding: 48rpx 40rpx 40rpx;
+  box-shadow: 0 16rpx 44rpx rgba(58, 107, 240, 0.12);
+}
+.card-title { font-size: 38rpx; font-weight: 700; color: var(--text-1); }
+.card-desc { font-size: 24rpx; color: var(--text-3); margin-top: 12rpx; line-height: 1.6; }
+
+.tips { margin-top: 34rpx; }
+.tip-item { display: flex; align-items: flex-start; margin-bottom: 18rpx; }
+.tip-dot {
+  width: 12rpx; height: 12rpx; border-radius: 50%;
+  background: var(--primary); flex-shrink: 0; margin: 12rpx 14rpx 0 0;
+}
+.tip-item text { flex: 1; font-size: 23rpx; color: var(--text-3); line-height: 1.7; }
+
+/* ---------- 按钮 ---------- */
+.wx-btn { margin-top: 40rpx; }
+.wx-btn::after { border: none; }
+.agree-text {
+  margin-top: 26rpx; text-align: center;
+  font-size: 21rpx; color: var(--text-4); line-height: 1.7;
+}
+.link { color: var(--primary); }
+
+.footer {
+  margin-top: auto; padding: 40rpx 0 50rpx;
+  text-align: center; font-size: 21rpx; color: var(--text-4);
+}

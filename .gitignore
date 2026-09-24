@@ -1,0 +1,36 @@
+# ============================================================
+# 机电图书馆 · 座位预约与学习管理（四端统一）仓库根 .gitignore
+# 各子项目已有各自的 .gitignore：
+#   - library-seat/.gitignore 已忽略 target/ 与 IDE 文件
+#   - library-admin/.gitignore 已忽略 node_modules
+# 这里补充跨项目通用项。
+# ============================================================
+
+# --- 操作系统 / 编辑器 ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+*.swo
+.idea/
+*.iml
+.vscode/
+
+# --- 构建产物（可重新生成，不进版本库）---
+target/
+build/
+dist/
+out/
+bin/
+*.jar
+*.war
+*.class
+
+# --- 前端依赖（已用 package-lock.json / pom.xml 锁定版本，不提交 node_modules）---
+node_modules/
+
+# --- 日志 / 临时文件 ---
+*.log
+*.tmp
+*.bak

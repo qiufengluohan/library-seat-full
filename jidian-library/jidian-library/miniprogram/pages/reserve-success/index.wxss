@@ -1,0 +1,97 @@
+@import "../../styles/nav.wxss";
+
+.nav-bar { background: #fff; }
+
+/* ---------- 空态（未配置后端 / 请求失败） ---------- */
+.empty-card { text-align: center; padding: 60rpx 32rpx 50rpx; }
+.empty-ico {
+  width: 80rpx; height: 80rpx; border-radius: 50%;
+  background: #FEECEA; color: #C53A30;
+  font-size: 42rpx; font-weight: 700;
+  margin: 0 auto 22rpx;
+  display: flex; align-items: center; justify-content: center;
+}
+.empty-title { font-size: 32rpx; font-weight: 700; color: #1B2333; }
+.empty-desc { font-size: 23rpx; color: #8A94A6; line-height: 1.7; margin-top: 14rpx; text-align: left; }
+
+.wrap { min-height: 100vh; background: #F4F7FC; padding-bottom: 60rpx; }
+.body { padding: 24rpx 28rpx 0; }
+
+/* ---------- 结果卡 ---------- */
+.result-card {
+  background: #fff; border-radius: 32rpx;
+  padding: 48rpx 32rpx 36rpx;
+  text-align: center;
+  box-shadow: 0 8rpx 28rpx rgba(58, 107, 240, 0.07);
+}
+.result-art { position: relative; display: flex; justify-content: center; margin-bottom: 28rpx; }
+.ra-seat { display: flex; flex-direction: column; align-items: center; }
+.ra-back { width: 116rpx; height: 74rpx; border-radius: 20rpx; background: #BFD3FB; }
+.ra-pad {
+  width: 148rpx; height: 34rpx; border-radius: 17rpx;
+  background: linear-gradient(150deg, #5B8CFF, #3A6BF0);
+  margin-top: 10rpx;
+  box-shadow: 0 10rpx 22rpx rgba(58, 107, 240, 0.3);
+}
+.ra-check {
+  position: absolute; right: 50%; margin-right: -108rpx; top: -6rpx;
+  width: 60rpx; height: 60rpx; border-radius: 50%;
+  background: linear-gradient(150deg, #4BD8A4, #22C08A);
+  color: #fff; font-size: 34rpx; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8rpx 18rpx rgba(34, 192, 138, 0.32);
+  border: 5rpx solid #fff;
+}
+.result-title { font-size: 40rpx; font-weight: 700; color: #1B2333; }
+.result-status { margin-top: 14rpx; display: flex; justify-content: center; }
+.result-count {
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 22rpx; font-size: 24rpx; color: #5B6478;
+  background: #F4F7FC; border-radius: 30rpx; padding: 14rpx 26rpx;
+}
+.rc-dot { width: 14rpx; height: 14rpx; border-radius: 50%; margin-right: 12rpx; flex-shrink: 0; }
+.rc-dot.s-wait { background: #3A6BF0; }
+.rc-dot.s-now { background: #FF9F2E; }
+.rc-dot.s-late { background: #F2564B; }
+.rc-dot.s-using { background: #22C08A; }
+.rc-dot.s-done { background: #AAB2C0; }
+.rc-dot.s-cancel { background: #C2C9D6; }
+
+/* ---------- 预约信息 ---------- */
+.info-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22rpx 0;
+  border-bottom: 2rpx solid #F2F5FA;
+}
+.info-row:last-child { border-bottom: none; }
+.info-k { font-size: 26rpx; color: #8A94A6; }
+.info-v { font-size: 28rpx; color: #1B2333; font-weight: 600; }
+.info-sub { font-size: 23rpx; color: #AAB2C0; font-weight: 400; }
+.fac {
+  display: inline-block; font-size: 20rpx; color: #3A6BF0;
+  background: #EBF1FE; padding: 3rpx 12rpx; border-radius: 6rpx;
+  margin-left: 8rpx; font-weight: 500;
+}
+
+/* ---------- 提示卡 ---------- */
+.tip-card {
+  display: flex; align-items: center;
+  margin-top: 24rpx;
+  background: #FFF7EC; border-radius: 24rpx;
+  padding: 24rpx 26rpx;
+}
+.tip-ico-big {
+  width: 40rpx; height: 40rpx; border-radius: 50%; flex-shrink: 0;
+  background: #FF9F2E; color: #fff;
+  font-size: 26rpx; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin-right: 18rpx;
+}
+.tip-text { flex: 1; font-size: 23rpx; color: #B87A2B; line-height: 1.6; }
+
+/* ---------- 操作 ---------- */
+.actions { display: flex; margin-top: 40rpx; }
+.cancel-link {
+  text-align: center; font-size: 25rpx; color: #F2564B;
+  margin-top: 34rpx;
+}

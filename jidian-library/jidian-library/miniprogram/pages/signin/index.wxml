@@ -1,0 +1,144 @@
+<view class="wrap">
+
+  <!-- ============ 导航 ============ -->
+  <view class="nav-bar" style="padding-top:{{statusBarHeight}}px">
+    <view class="nav">
+      <view class="nav-back" bindtap="back"><view class="nav-back-arrow"></view></view>
+      <view class="nav-title">签到</view>
+      <view class="nav-right" bindtap="onRefresh">刷新</view>
+    </view>
+  </view>
+
+  <!-- ============ 后端不可用 ============ -->
+  <view class="body" wx:if="{{error}}">
+    <view class="card empty-card">
+      <view class="empty-ico">!</view>
+      <view class="empty-title">无法获取预约信息</view>
+      <view class="empty-desc">{{error}}</view>
+      <view class="btn btn-ghost btn-sm mt24" bindtap="onRefresh">重试</view>
+    </view>
+  </view>
+
+  <view class="body" wx:elif="{{r}}">
+
+    <!-- ============ 座位卡 ============ -->
+    <view class="seat-card" style="border-color:{{color}}">
+      <view class="sc-top">
+        <view class="sc-seat">
+          <view class="sc-ico"></view>
+          <text class="sc-name">{{r.area}}/{{r.seatNo}}</text>
+        </view>
+        <view class="{{statusTag}}">{{statusLabel}}</view>
+      </view>
+      <view class="sc-sub">{{r.seatCode}} · {{r.floorText}} · 座位号 {{r.seatNo}}</view>
+    </view>
+
+    <!-- ============ 状态主区 ============ -->
+    <view class="card state-card">
+      <view class="state-dot" style="background:{{color}}"></view>
+      <view class="state-label" style="color:{{color}}">{{statusLabel}}</view>
+      <view class="state-counter" wx:if="{{counterLabel}}">
+        <view class="scn-label">{{counterLabel}}</view>
+        <view class="scn-value mono">{{counterValue}}</view>
+      </view>
+      <view class="state-desc">
+        <block wx:if="{{r.status === 'RESERVED'}}">请在座位上刷校园卡完成签到，签到由读卡器自动上报</block>
+        <block wx:elif="{{r.status === 'USING'}}">正在使用座位，可暂离或离座</block>
+        <block wx:elif="{{r.status === 'AWAY'}}">座位为你保留，回座后恢复使用</block>
+        <block wx:elif="{{r.status === 'COMPLETED'}}">本次使用已结束</block>
+        <block wx:elif="{{r.status === 'CANCELLED'}}">本次预约已取消</block>
+        <block wx:else>超时未签到，座位已自动释放</block>
+      </view>
+    </view>
+
+    <!-- ============ 签到凭证（仅待签到状态） ============ -->
+    <view class="card" wx:if="{{r.status === 'RESERVED'}}">
+      <view class="sec-head">
+        <view class="sec-title">签到凭证</view>
+        <view class="f22 t3">RFID 刷卡</view>
+      </view>
+      <view class="rfid">
+        <view class="rfid-wave">
+          <view class="rfid-ico"></view>
+        </view>
+        <view class="rfid-uid mono">{{rfidUid || '暂无'}}</view>
+        <view class="rfid-tip">请携带校园卡到座位读卡器上刷卡，读卡器经 OneNET 上报后端后自动完成签到，本页状态会自动刷新，无需手动操作。</view>
+      </view>
+    </view>
+
+    <!-- ============ 预约信息 ============ -->
+    <view class="card">
+      <view class="sec-head">
+        <view class="sec-title">预约信息</view>
+        <view class="f22 t3">No.{{r.id}}</view>
+      </view>
+      <view class="info-row">
+        <text class="info-k">预约时间</text>
+        <text class="info-v">{{r.reserveTime || '—'}}</text>
+      </view>
+      <view class="info-row" wx:if="{{r.signTime}}">
+        <text class="info-k">签到时间</text>
+        <text class="info-v">{{r.signTime}}</text>
+      </view>
+      <view class="info-row" wx:if="{{r.leaveTime}}">
+        <text class="info-k">暂离时间</text>
+        <text class="info-v">{{r.leaveTime}}</text>
+      </view>
+      <view class="info-row" wx:if="{{r.returnTime}}">
+        <text class="info-k">回座时间</text>
+        <text class="info-v">{{r.returnTime}}</text>
+      </view>
+      <view class="info-row" wx:if="{{r.releaseTime}}">
+        <text class="info-k">离座时间</text>
+        <text class="info-v">{{r.releaseTime}}</text>
+      </view>
+    </view>
+
+    <!-- ============ 操作（按状态机分支） ============ -->
+    <view class="actions">
+      <block wx:if="{{r.status === 'RESERVED'}}">
+        <view class="btn btn-ghost flex-1" bindtap="onRefresh">刷新状态</view>
+        <view class="btn btn-plain flex-1 ml16" bindtap="onCancel">取消预约</view>
+      </block>
+
+      <block wx:elif="{{r.status === 'USING'}}">
+        <view class="btn btn-ghost flex-1" bindtap="onLeave">暂离</view>
+        <view class="btn btn-primary flex-1 ml16" bindtap="onRelease">离座</view>
+      </block>
+
+      <block wx:elif="{{r.status === 'AWAY'}}">
+        <view class="btn btn-primary btn-block" bindtap="onReturn">我已回座</view>
+      </block>
+
+      <block wx:else>
+        <view class="btn btn-ghost flex-1" bindtap="goMyReserve">我的预约</view>
+        <view class="btn btn-primary flex-1 ml16" bindtap="goSeats">去预约座位</view>
+      </block>
+    </view>
+
+    <!-- ============ 规则说明 ============ -->
+    <view class="card rules">
+      <view class="sec-head"><view class="sec-title">签到与座位规则</view></view>
+      <view class="rule-item">
+        <view class="rule-no">1</view>
+        <text class="rule-txt">签到方式：座位上的 RFID 读卡器自动读取校园卡并经后台上报，签到由系统完成，学生端无需手动操作。</text>
+      </view>
+      <view class="rule-item">
+        <view class="rule-no">2</view>
+        <text class="rule-txt">预约后 {{reserveExpireMin}} 分钟内未签到，座位自动释放并记一次预约超时。</text>
+      </view>
+      <view class="rule-item">
+        <view class="rule-no">3</view>
+        <text class="rule-txt">使用中可发起暂离，暂离超过 {{awayExpireMin}} 分钟未回座，座位自动释放。</text>
+      </view>
+      <view class="rule-item">
+        <view class="rule-no">4</view>
+        <text class="rule-txt">压力传感器检测到有人落座而人体红外持续无人时，设备判定为假占座并上报异常告警。</text>
+      </view>
+    </view>
+
+    <view class="holder"></view>
+  </view>
+
+  <view class="loading-box" wx:else>正在加载预约信息…</view>
+</view>

@@ -1,0 +1,49 @@
+<view class="login-page">
+
+  <!-- 顶部品牌区 -->
+  <view class="brand" style="padding-top: {{statusBarHeight + 40}}px">
+    <view class="brand-mask a"></view>
+    <view class="brand-mask b"></view>
+    <view class="brand-inner">
+      <view class="logo">
+        <view class="logo-book b1"></view>
+        <view class="logo-book b2"></view>
+        <view class="logo-book b3"></view>
+      </view>
+      <view class="brand-title">{{appName}}</view>
+      <view class="brand-sub">座位预约与学习管理</view>
+    </view>
+  </view>
+
+  <!-- 登录卡片 -->
+  <view class="login-card">
+    <view class="card-title">微信登录</view>
+    <view class="card-desc">使用微信身份一键登录，无需设置头像与用户名</view>
+
+    <view class="tips">
+      <view class="tip-item">
+        <view class="tip-dot"></view>
+        <text>登录后由后端用微信凭证换取账号标识，存入 user 表</text>
+      </view>
+      <view class="tip-item">
+        <view class="tip-dot"></view>
+        <text>昵称默认为「{{defaultNickname}}」，可在「我的」页自行修改</text>
+      </view>
+      <view class="tip-item">
+        <view class="tip-dot"></view>
+        <text>校园卡号由图书馆管理员绑定，用于刷卡签到</text>
+      </view>
+    </view>
+
+    <button class="btn btn-primary btn-block wx-btn" bindtap="onWechatLogin" disabled="{{submitting}}">
+      {{submitting ? '登录中…' : '微信一键登录'}}
+    </button>
+
+    <view class="agree-text">
+      登录即表示同意
+      <text class="link" catchtap="openAgreement">《用户协议与隐私政策》</text>
+    </view>
+  </view>
+
+  <view class="footer">{{appName}} v{{version}}</view>
+</view>

@@ -1,0 +1,445 @@
+图书馆智慧座位系统 · 微信小程序端前后端方案
+依据：云端.txt（OneNET 只管设备影子与上下行；Spring Boot 管状态机与鉴权；MySQL 管订单）
+原则：小程序禁止直连 OneNET；颜色只读后端合成态，不读 ADC；一人同一时刻只允许 1 条进行中订单。
+
+
+============================================================
+0. 定位与硬边界
+============================================================
+
+0.1 定位
+
+- 学生端：选座、预约、暂离、回座、离座、看自己的学习时长。
+- 签到不在小程序里点按钮完成：先约任意座，再到馆内共享读卡器（Reader_Lobby_01）刷卡。
+- 后端用「这个人当前那一单」定位 seat_id，再改订单、给目标座位下发 seat_display=2。
+- 只调 Spring Boot REST + WebSocket；不保存 OneNET 密钥。
+
+0.2 三条硬边界
+
+1. 颜色只读后端合成态（订单 + 影子 + 在线 + 告警），不读 ADC。
+2. 刷卡按人找单，禁止用读卡器 deviceName 当 seat_id；小程序也不得把读卡器当座位预约。
+3. 毕设按「一人一单」：进行中（待签到 / 使用中 / 暂离）至多 1 条。若以后允许多单，刷卡不能自动落座，必须先在小程序选定订单再刷卡。
+
+0.3 学生能做 / 不能做
+
+能做：登录、看座位图、预约空闲座、取消未签到、暂离、回座、离座、看个人统计。
+不能做：消警、强释、改设备参数、蜂鸣、录入任意 RFID（绑定见 7.6）、看全馆违规报表。
+
+0.4 与其它端的关系
+
+[STM32 + ESP8266] --MQTT--> [OneNET Studio]
+        | HTTP 推送 / OpenAPI
+        v
+[Spring Boot + MySQL]  <--业务权威
+        | HTTP + WebSocket（须带登录 token）
+        v
+[微信小程序]     [Web 管理端]
+
+
+============================================================
+1. 技术选型
+============================================================
+
+小程序前端
+- 微信原生小程序（WXML + WXSS + JS）即可；若希望与 Vue 管理端同语法，可用 uni-app 只发微信。
+- 请求：wx.request，Header 带 token。
+- 实时：wx.connectSocket 连 wss://{host}/ws/seats，连接带 token。
+- 登录：wx.login 拿 code → 后端换 openid → 发业务 token。
+- 座位图：按 area/floor 筛，格子颜色映射后端 status/alarm/online。
+- 不在小程序内嵌 OneNET 控制台、不存产品密钥。
+
+后端（与管理端同一套 Spring Boot）
+- POST /api/auth/wechat-login 发学生 token（JWT 或随机 token 存表）
+- 业务接口验学生 token；管理员接口学生调不通
+- 预约事务：锁座 + 锁该生进行中订单
+- 签到由 OneNET 推送 rfid_uid 异步走「按人找单」，不是小程序 API
+- WebSocket 同一 /ws/seats，学生连上后也可收座位变化（至少要收自己那一座）
+- Redis 仅推送 id 去重；超时用定时扫 reservation
+
+部署
+- 小程序 request / socket 合法域名必须是公网 HTTPS / WSS
+- 与管理端共用同一 API 主机
+
+
+============================================================
+2. 职责切分
+============================================================
+
+层              做什么                                      不做什么
+--------------------------------------------------------------------------------
+微信小程序      登录、座位图、下单/取消/暂离/回座/离座、    不直连 OneNET
+                个人学习时长；WS 刷新座位色                 不读 ADC
+                                                            不自己改订单状态机
+                                                            不把读卡器当座位
+Spring Boot     微信登录发 token、预约状态机、              Controller 内不同步调 OpenAPI
+                共享读卡签到（异步）、超时释放、            不同步跑完整状态机
+                合成座位色、WS、下发 seat_display
+MySQL           用户、订单、绑定、学习时长、座位主数据      —
+OneNET          读卡 rfid_uid、座位影子、上下行             不改订单
+Redis           推送 id 幂等                                不做预约超时队列
+
+
+============================================================
+3. 小程序页面信息架构
+============================================================
+
+3.1 页面清单
+
+1) 登录 / 授权
+   wx.login → POST /api/auth/wechat-login
+   首次可补学号、昵称（学号用于管理端 RFID 绑定）
+   token 存 Storage；过期清会话回登录
+
+2) 座位图（首页）
+   GET /api/seats?area=&floor=
+   颜色同云端第 5 节（学生视角）：
+     空闲绿 / 待签到黄 / 使用中红 / 暂离灰
+     告警闪烁红（角标原订单态）
+     离线灰角标「离线」——仍可预约（单成立，黄+离线，pending_display=1）
+   读卡器不渲染成格子。
+   自己的进行中座位可高亮「我的」。
+   点空闲座进入预约确认；点其它座只读详情。
+   顶部提示：读卡器离线时「当前无法刷卡签到，预约仍可提交」。
+
+3) 座位详情
+   GET /api/seats/{seatId}
+   展示区域/楼层/编号、合成态、是否离线、是否告警
+   空闲且本人无进行中单：预约
+   已约未签到且是自己的单：取消预约 + 倒计时（reserve_expire_at）
+   不提供签到按钮（签到=刷卡）
+
+4) 我的预约（进行中）
+   GET /api/reservations/current   0 或 1 条
+   待签到：剩余刷卡时间、取消、引导「请到大厅读卡器刷卡」
+   使用中：暂离、离座
+   暂离：剩余回座时间、结束暂离（回座）、离座（若产品允许暂离直接离座则走 release）
+   无单：引导去座位图
+
+5) 个人统计
+   GET /api/statistics/me
+   累计有效学习时长（仅使用中时段，暂离不计）
+   可选：最近若干条 study_record（选做）
+
+6) 我的 / 绑定说明（可选页）
+   展示是否已绑定 RFID（GET 当前用户信息即可）
+   绑定方式二选一（全馆统一，不要两套并行混乱）：
+     A. 管理端录入 uid + 学号（推荐毕设，流程可控）
+     B. 「首次刷卡绑当前登录用户」——须先登录小程序再刷
+   未绑定：预约可下，刷卡不改单，文案提示「请先到管理员处绑定校园卡」
+
+3.2 建议目录（微信原生）
+
+miniprogram/
+  app.js / app.json / app.wxss
+  pages/
+    login/login
+    seats/seats              座位图
+    seat-detail/seat-detail
+    reservation/reservation  我的进行中订单
+    stats/stats
+    mine/mine
+  services/
+    api.js                   封装 wx.request + token
+    ws.js                    封装 socket：重连 → GET /api/seats → 增量
+    auth.js
+  utils/
+    seatColor.js             status/alarm/online → 颜色/角标
+
+TabBar 建议：座位图 | 我的预约 | 统计 | 我的
+
+3.3 WebSocket 规则
+
+- 地址：wss://{host}/ws/seats，连接带 token
+- 场景：任意座位预约/签到/暂离/回座/离座/超时/告警/消警/上下线/强释
+- 座位图页必须连；我的预约页至少订阅后刷新当前单
+- 断开：指数退避重连（1s → 2s → … 封顶 30s）；连上后防抖再 GET /api/seats 全量，再收增量
+- 收到 SEAT_STATUS 后按 seatId 补丁更新本地字典，不要替换整表、不要只改颜色不改角标
+
+
+============================================================
+4. 座位颜色（学生端与管理端同一套合成态）
+============================================================
+
+合成态           格子          角标              学生可点
+--------------------------------------------------------------------------------
+0 空闲           绿            无                预约（本人无进行中单）
+1 已预约待签到   黄            离线则可叠加      仅自己的单：取消
+2 使用中         红            可叠加告警        仅自己的单：暂离、离座
+3 暂离           灰            可叠加告警        仅自己的单：回座、离座
+告警叠加         闪烁红        原订单态          不能消警；有单则操作仍按原订单态
+设备离线         保持订单色    灰「离线」        空闲仍可预约；签到依赖读卡器在线
+读卡器离线       不影响格子色  首页提示          预约可下、刷卡签到不可
+
+渲染优先级（与管理端一致，高→低）：
+1. alarm=true → 闪烁红底，不论是否在线
+2. 订单业务色：0 绿 / 1 黄 / 2 红 / 3 灰
+3. online=false → 只加灰角标「离线」，不改写底色
+同时告警且离线：闪红 + 离线角标 + 原订单角标。禁止离线改成灰底盖掉告警/订单色。
+
+他人的黄/红/灰座：不可预约、不可操作别人的单。
+
+
+============================================================
+5. 学生端 API 契约
+============================================================
+
+5.1 鉴权
+
+POST /api/auth/wechat-login
+  入参建议：{"code":"wx.login的code"} 或后端用 code 换 openid
+  出参：token、user（id、studentNo、nickname、rfidBound）
+  首次无 user 则创建 wechat_openid 记录；学号可随后 PATCH（选做）或注册时填写
+
+业务请求 Header：Authorization: Bearer {token}
+学生 token 不能访问 /api/admin/**
+
+5.2 接口列表
+
+方法    路径                              作用                  规则
+--------------------------------------------------------------------------------
+POST    /api/auth/wechat-login            微信登录发 token      见上
+GET     /api/seats?area=&floor=           座位列表              只读合成态；不含读卡器
+GET     /api/seats/{seatId}               座位详情              只读
+GET     /api/reservations/current         我的进行中订单        0 或 1 条
+POST    /api/reservations                 预约                  见 7.1
+        Body: {"seatId":"Seat_A_2F_001"}
+POST    /api/reservations/{id}/cancel     未签到学生取消        仅待签到且本人
+POST    /api/reservations/{id}/leave      暂离                  仅使用中且本人
+POST    /api/reservations/{id}/return     小程序回座            仅暂离且本人
+POST    /api/reservations/{id}/release    离座关单              使用中或暂离且本人
+GET     /api/statistics/me                我的学习时长          暂离不计
+GET     /api/me                           当前用户+是否已绑卡   建议补，方便「我的」页
+
+没有「小程序签到」接口。签到只走读卡推送 17.2。
+没有 force-release / clear-alarm / devices/config。
+
+5.3 座位列表项字段（与管理端同源、对学生裁剪）
+
+- seatId / deviceName
+- area、floor、seatNo
+- status：0/1/2/3
+- alarm、online
+- mine：是否当前用户进行中订单所在座（后端算，避免前端扫全量订单）
+- reserveExpireAt / leaveExpireAt：仅当 mine=true 时返回，供倒计时
+
+5.4 进行中订单字段
+
+- id、seatId、area、floor、seatNo
+- status：待签到 / 使用中 / 暂离
+- reserveExpireAt、leaveExpireAt、checkinAt
+- seatOnline、readerOnline、alarm（方便文案：「请在 N 分钟内到大厅刷卡」）
+
+5.5 WebSocket 消息（同管理端）
+
+{
+  "type": "SEAT_STATUS",
+  "seatId": "Seat_A_2F_001",
+  "status": 2,
+  "online": true,
+  "alarm": false,
+  "timestamp": 1710000000000
+}
+
+学生收到后：
+- 更新座位图对应格
+- 若是自己的座，刷新「我的预约」
+- 若自己的单被超时取消/强释，current 应变空并 toast
+
+
+============================================================
+6. 后端模块（小程序相关）
+============================================================
+
+包/类                         职责
+--------------------------------------------------------------------------------
+WeChatAuthController          code → openid → 发学生 token
+StudentSeatController         /api/seats 列表与详情（合成态）
+ReservationController         预约/取消/暂离/回座/离座/current
+StudentStatController         /api/statistics/me
+SeatStatusService             唯一改订单入口；合成颜色
+ReservationLock               事务：该座无进行中单 AND 该生无进行中单 AND enabled
+RfidCheckinHandler            推送 rfid_uid 后按人找单（待签到签到 / 暂离回座）
+ReservationScheduler          待签到超时取消；暂离超时关单
+OneNetThingService            预约成功 SetProperty seat_display=1、reserve_timeout=900
+                              签到/回座 display=2；暂离=3；离座/超时=0
+SeatWsHandler                 广播座位变化
+UserService                   openid、学号、rfidBound 查询
+
+Controller 禁止同步调 OpenAPI。下发放异步线程；失败 pending_display，订单不回滚。
+
+
+============================================================
+7. 学生写路径
+============================================================
+
+7.1 预约  POST /api/reservations
+
+事务内（加锁，防并发占同一座、防一人两单）：
+1. 座位 enabled 且无进行中订单
+2. 该生无进行中订单
+3. 插入 reservation status=待签到
+4. reserve_expire_at = now + 900s（与物模型 reserve_timeout 默认一致）
+
+4b. 同一事务内 pending_display=1（禁止提交后再补 pending）
+
+事务后异步：
+5. SetDeviceProperty 该座 seat_display=1、reserve_timeout=900
+6. 成功清空 pending_display；失败保留 pending，订单不回滚
+7. WS：该座变黄（设备离线则黄+离线）
+
+小程序：成功后跳转「我的预约」，展示倒计时和刷卡引导。
+
+7.2 取消  POST /api/reservations/{id}/cancel
+
+- 仅本人、仅待签到
+- 关单 status=学生取消
+- 异步 seat_display=0（失败 pending=0）
+- WS 变绿
+
+7.3 暂离  POST /api/reservations/{id}/leave
+
+- 仅本人、仅使用中
+- status=暂离，leave_expire_at=now+约定秒（与产品一致，文案写清，如 30 分钟；云端未写死暂离时长，实现时定一个默认并在详情返回）
+- 异步 seat_display=3
+- 有效学习时长在此断开（本段使用中写入 study_record 或离座时再按 checkin/leave 切段，全馆统一一种算法）
+- WS 变灰
+
+7.4 小程序回座  POST /api/reservations/{id}/return
+
+- 仅本人、仅暂离
+- status=使用中，清 leave_expire_at
+- 异步 seat_display=2
+- WS 变红
+- 与刷卡回座（7.5）结果相同，两条入口
+
+7.5 刷卡签到 / 刷卡回座（非小程序 API，小程序只收 WS）
+
+1. Reader_Lobby_01 上报 rfid_uid（不同 push id 的连刷仍可能进来）
+2. 查 rfid_user → user_id；无绑定：不改单
+3. SET lock:checkin:{userId} NX EX 3，抢不到则丢弃（防连刷双签到）
+4. 查该生进行中订单：待签到或暂离；无单结束
+5. 目标座位=订单.seat_id，与读卡器名无关
+6. 事务内：待签到→使用中写 checkin_at，或暂离→使用中；pending_display=2
+7. 提交后 SetProperty seat_display=2；成功清空 pending
+8. WS 目标座变红；小程序「我的预约」变为使用中
+
+不允许：用上报 rfid_uid 的 deviceName 当 seat_id。
+使用中再刷：云端未要求再次签到，忽略或仅 OLED 提示已在座。
+
+7.6 RFID 绑定
+
+- 推荐：管理端 POST /api/admin/rfid-binds
+- 备选：首次刷卡绑当前登录用户——须有「谁是当前用户」的会话，毕设更难演示，需在读卡与在线用户间约定
+- 未绑定：预约成功也不能变成使用中
+
+7.7 离座  POST /api/reservations/{id}/release
+
+- 仅本人；使用中或暂离
+- status=已完成，checkout_at，插入/收口 study_record
+- 异步 seat_display=0
+- WS 变绿
+
+7.8 超时（定时任务，小程序收 WS）
+
+每分钟：
+- 待签到且 reserve_expire_at < now → 超时取消，display=0
+- 暂离且 leave_expire_at < now → 关单释放，display=0
+小程序 toast「预约已超时取消」或「暂离超时，座位已释放」
+
+7.9 管理员强释 / 消警
+
+- 强释：学生 current 变空，座位变绿
+- 消警：座位不再闪红，订单不变；学生不能消警
+
+
+============================================================
+8. 学习时长（学生统计）
+============================================================
+
+- 有效时长只计 status=使用中 的时间段
+- 暂离不计入
+- 签到写 checkin_at；离座 / 超时释放 / 强释写 checkout_at，插入 study_record
+- study_minutes = 各段使用中时长之和（秒转分钟）
+- GET /api/statistics/me 返回累计分钟数；明细选做
+
+
+============================================================
+9. 关键交互文案（答辩演示）
+============================================================
+
+预约成功：
+  「已预约 Seat_B_1F_042，请在 15 分钟内到大厅读卡器刷卡签到」
+
+座位或读卡器离线仍下单：
+  「预约已生效，设备通信异常，签到或灯效可能稍后同步」
+
+未绑定刷卡（学生事后在小程序看到仍是待签到）：
+  「未绑定校园卡，请联系管理员绑定后再刷卡」
+
+无进行中单却去刷：
+  小程序无单可刷新；读卡器 OLED 提示无预约
+
+一人已有单再点另一空座：
+  「您已有进行中预约，请先离座或取消」
+
+告警中自己的座：
+  「该座位触发假占座提醒，订单仍有效；请管理员消警或继续使用」
+
+
+============================================================
+10. 数据表（学生端相关）
+============================================================
+
+user
+  id, wechat_openid, student_no, nickname, status, created_at, updated_at
+
+rfid_user
+  uid, user_id, created_at
+
+seat / seat_shadow / reservation / study_record
+  字段同云端第 19 节与《Web管理端方案.txt》
+  学生不写 violation、operation_log、admin_user
+
+预约 status：
+  待签到 / 使用中 / 暂离 / 已完成 / 超时取消 / 学生取消 / 强制释放
+
+设备命名：
+  座位 Seat_{区域}_{楼层}_{编号}
+  读卡 Reader_{位置}_{编号} —— 小程序座位接口必须过滤 READER
+
+
+============================================================
+11. 安全
+============================================================
+
+- 微信 code 只在服务器换 openid，小程序不拿 AppSecret
+- 业务口验学生 token；只能操作自己的 reservation
+- 预约事务同时锁座位与用户进行中订单
+- 不把 OneNET 密钥、管理员账号下发到小程序
+- request / socket 合法域名 + HTTPS/WSS
+
+
+============================================================
+12. 实现顺序
+============================================================
+
+1. wechat-login + token 拦截（开发阶段可用测试 openid 免微信审核）
+2. GET /api/seats 合成列表 + 座位图着色
+3. 预约事务 + 取消 + 我的进行中
+4. 倒计时与刷卡引导文案
+5. WS 增量与断线全量
+6. 暂离 / 回座 / 离座
+7. 对接读卡签到（联调 OneNET 推送）后，小程序只验证 WS 变红
+8. /api/statistics/me
+9. 读卡器离线提示、告警展示、超时 toast
+
+
+============================================================
+13. 与管理端的接口边界（避免混用）
+============================================================
+
+学生端有、管理端无：wechat-login、reservations CRUD、statistics/me
+管理端有、学生端无：admin/login、dashboard、force-release、clear-alarm、
+                    devices/config、buzzer、rfid-binds 写入、全馆报表
+两端共用：座位合成态、/ws/seats 消息格式、一人一单状态机、pending_display 规则
+)

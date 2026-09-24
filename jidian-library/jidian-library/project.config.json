@@ -1,0 +1,103 @@
+{
+  "miniprogramRoot": "miniprogram/",
+  "compileType": "miniprogram",
+  "libVersion": "3.17.2",
+  "appid": "wx0384c7d1e1e2d16d",
+  "projectname": "jidian-library",
+  "description": "图书馆座位预约与学习管理小程序（毕业设计）｜小程序侧只与自建 Spring Boot 后端通信：座位状态、预约、用户资料、校园卡绑定全部来自后端接口；设备经 OneNET 上报后端，小程序不直连物联网平台",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "newFeature": true,
+    "coverView": true,
+    "nodeModules": false,
+    "autoAudits": false,
+    "showShadowRootInWxmlPanel": true,
+    "scopeDataCheck": false,
+    "checkInvalidKey": true,
+    "checkSiteMap": true,
+    "uploadWithSourceMap": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    },
+    "useCompilerModule": true,
+    "userConfirmedUseCompilerModuleSwitch": false,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true
+  },
+  "condition": {
+    "miniprogram": {
+      "list": [
+        {
+          "name": "登录 / 注册",
+          "pathName": "pages/login/index",
+          "query": "",
+          "scene": null
+        },
+        {
+          "name": "首页",
+          "pathName": "pages/index/index",
+          "query": "",
+          "scene": null
+        },
+        {
+          "name": "座位页",
+          "pathName": "pages/seats/index",
+          "query": "",
+          "scene": null
+        },
+        {
+          "name": "预约成功",
+          "pathName": "pages/reserve-success/index",
+          "query": "id=1001",
+          "scene": null
+        },
+        {
+          "name": "签到 / 离座",
+          "pathName": "pages/signin/index",
+          "query": "id=1001",
+          "scene": null
+        },
+        {
+          "name": "我的预约",
+          "pathName": "pages/my-reserve/index",
+          "query": "",
+          "scene": null
+        },
+        {
+          "name": "我的",
+          "pathName": "pages/mine/index",
+          "query": "",
+          "scene": null
+        },
+        {
+          "name": "意见反馈",
+          "pathName": "pages/feedback/index",
+          "query": "",
+          "scene": null
+        }
+      ]
+    }
+  },
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {}
+}

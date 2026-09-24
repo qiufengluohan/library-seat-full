@@ -1,0 +1,918 @@
+图书馆智慧座位系统 · 设备端方案
+依据：云端方案.txt（OneNET物模型 + STM32F103C8T6 + ESP8266）
+原则：传感器融合判决、OneNET MQTT通信、OLED实时显示、离线容错
+
+
+============================================================
+0. 设备端总体架构
+============================================================
+
+硬件组成：
+
+[感知层]
+  - FSR402薄膜压力传感器（模拟量ADC采集）
+  - HC-SR505人体红外传感器（数字GPIO输入）
+  - MFRC-522 RFID读卡器（SPI通信）
+
+[控制层]
+  - STM32F103C8T6最小系统板（主控MCU）
+  - 0.96寸I2C OLED显示屏
+  - 有源蜂鸣器（GPIO控制）
+  - 按键（GPIO输入，用于测试/复位）
+
+[传输层]
+  - ESP8266-01S WiFi模块（UART串口通信）
+  - MQTT协议连接OneNET Studio
+
+供电：
+  - Micro-USB 5V供电（毕设演示用固定桌终端，不考虑电池续航）
+
+完整数据流：
+
+传感器采集 → STM32融合判决 → OLED显示
+                      ↓
+                  UART发送
+                      ↓
+                ESP8266接收
+                      ↓
+              MQTT发布到OneNET
+                      ↓
+            OneNET HTTP推送Spring Boot
+                      ↓
+                WebSocket推送到前端
+
+
+============================================================
+1. 硬件选型与BOM预算
+============================================================
+
+模块名称              选型型号                    参考单价(RMB)    接口
+--------------------------------------------------------------------------------
+主控板               STM32F103C8T6最小系统板      ￥12.5          GPIO/ADC/SPI/I2C/UART
+压力传感器           FSR402柔性薄膜压力传感器     ￥13.0          模拟量ADC
+人体红外             HC-SR505热释电模块          ￥4.0           数字GPIO
+RFID模块             MFRC-522刷卡模块+S50卡片    ￥8.0           SPI
+WiFi模块             ESP8266-01S                 ￥5.5           UART
+显示屏               0.96寸I2C OLED(SSD1306)     ￥8.0           I2C
+蜂鸣器               有源蜂鸣器(5V)              ￥2.0           GPIO
+按键                 轻触开关                    ￥1.0           GPIO
+辅料                 面包板+杜邦线+Micro-USB线   ￥7.0           —
+--------------------------------------------------------------------------------
+合计                 硬件开发散件总计             约￥61.0
+
+
+============================================================
+2. 引脚分配与接线
+============================================================
+
+2.1 STM32F103C8T6引脚分配
+
+模块              引脚              功能说明
+--------------------------------------------------------------------------------
+FSR402压力       PA0 (ADC1_IN0)    压力值ADC采集（0-4095）
+HC-SR505红外     PB0 (GPIO输入)    PIR信号检测（高电平=有人）
+MFRC-522 RFID    PA5 (SPI1_SCK)    SPI时钟
+                 PA6 (SPI1_MISO)   SPI主入从出
+                 PA7 (SPI1_MOSI)   SPI主出从入
+                 PB1 (GPIO输出)    NSS片选
+                 PB2 (GPIO输出)    RST复位
+ESP8266 WiFi     PA9 (USART1_TX)   UART发送→ESP8266 RX
+                 PA10 (USART1_RX)  UART接收←ESP8266 TX
+OLED显示屏       PB6 (I2C1_SCL)    I2C时钟
+                 PB7 (I2C1_SDA)    I2C数据
+蜂鸣器           PB8 (GPIO输出)    高电平触发
+按键             PB9 (GPIO输入)    下拉输入，按下高电平
+LED指示灯        PC13 (GPIO输出)   板载LED，状态指示
+
+2.2 ESP8266-01S接线
+
+ESP8266引脚       STM32引脚         说明
+--------------------------------------------------------------------------------
+VCC               3.3V              注意：ESP8266用3.3V，不能用5V
+GND               GND               共地
+TX                PA10 (RX)         ESP8266发送→STM32接收
+RX                PA9 (TX)          ESP8266接收←STM32发送
+CH_PD             3.3V              使能引脚
+RST               —                 不接（软件复位）
+GPIO0             —                 不接（正常启动模式）
+GPIO2             —                 不接
+
+注意：STM32的UART是5V TTL电平，ESP8266是3.3V TTL电平，建议加电平转换模块（实际短距离直连通常也能工作）。
+
+2.3 MFRC-522 RFID接线
+
+MFRC-522引脚      STM32引脚         说明
+--------------------------------------------------------------------------------
+VCC               3.3V              3.3V供电
+GND               GND               共地
+SCK               PA5 (SPI1_SCK)    SPI时钟
+MISO              PA6 (SPI1_MISO)   数据输出
+MOSI              PA7 (SPI1_MOSI)   数据输入
+NSS/SDA           PB1               片选信号（GPIO模拟或硬件SPI）
+RST               PB2               复位引脚
+IRQ               —                 不接（轮询模式）
+
+
+============================================================
+3. 传感器数据采集策略
+============================================================
+
+3.1 FSR402压力传感器
+
+工作原理：
+- 压力越大，电阻越小，ADC采样电压越高
+- 无压力时ADC值约0-50（取决于分压电阻）
+- 坐人后ADC值约500-2000（取决于体重和传感器位置）
+
+采集策略：
+- ADC分辨率：12位（0-4095）
+- 采样频率：每秒1次（无需高频采样）
+- 滤波算法：滑动平均滤波（取最近5次采样的平均值）
+- 阈值设定：通过实验确定空座ADC基线和坐人ADC值，阈值设为两者中间值
+  例：空座ADC≈30，坐人ADC≈800，阈值设为200
+
+代码逻辑：
+```c
+#define PRESSURE_THRESHOLD  200
+#define ADC_SAMPLE_COUNT    5
+
+uint16_t adc_buffer[ADC_SAMPLE_COUNT];
+uint8_t adc_index = 0;
+
+// 每次采样
+adc_buffer[adc_index++] = HAL_ADC_GetValue(&hadc1);
+if (adc_index >= ADC_SAMPLE_COUNT) {
+    adc_index = 0;
+}
+
+// 计算平均值
+uint32_t sum = 0;
+for (int i = 0; i < ADC_SAMPLE_COUNT; i++) {
+    sum += adc_buffer[i];
+}
+uint16_t avg_adc = sum / ADC_SAMPLE_COUNT;
+
+// 判断是否有人
+bool pressure_detected = (avg_adc > PRESSURE_THRESHOLD);
+```
+
+3.2 HC-SR505人体红外传感器
+
+工作原理：
+- 检测到人体热释电信号时输出高电平
+- 检测角度：<100°圆锥角
+- 检测距离：3米以内
+- 保持时间：约8-10秒（检测到人体后持续输出高电平的时间）
+- 封锁时间：约2秒（一次触发后需要等待的时间）
+
+采集策略：
+- GPIO输入轮询：每秒1次
+- 去抖动：连续2次读到高电平才判定为有人（避免误触发）
+- 静止人体检测盲区：HC-SR505在人体完全静止时可能失去信号，这是假占座检测的关键
+
+代码逻辑：
+```c
+#define PIR_CHECK_COUNT   2
+
+uint8_t pir_high_count = 0;
+
+// 每次检查
+if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0) == GPIO_PIN_SET) {
+    pir_high_count++;
+} else {
+    pir_high_count = 0;
+}
+
+bool pir_detected = (pir_high_count >= PIR_CHECK_COUNT);
+```
+
+3.3 双重感应融合判决
+
+核心算法（防假占座）：
+
+情况1：压力>阈值 AND 红外=有人 → 确认有人（正常使用）
+情况2：压力>阈值 AND 红外=无人 → 可能假占座（书本/背包）
+情况3：压力<阈值 AND 红外=有人 → 可能刚坐下或即将离开（过渡状态）
+情况4：压力<阈值 AND 红外=无人 → 确认无人（空闲）
+
+假占座判定逻辑：
+- 持续监测"压力>阈值 AND 红外=无人"的状态
+- 如果该状态持续时间超过3分钟（180秒），判定为假占座
+- 触发告警：蜂鸣器提示 + OLED显示警告 + 上报alarm_flag=true
+
+代码逻辑：
+```c
+typedef enum {
+    SEAT_IDLE,        // 空闲
+    SEAT_OCCUPIED,    // 使用中
+    SEAT_FAKE_OCCUPY  // 假占座告警
+} SeatState;
+
+uint32_t fake_occupy_start_time = 0;
+SeatState current_state = SEAT_IDLE;
+
+void update_seat_state(bool pressure_detected, bool pir_detected) {
+    if (pressure_detected && pir_detected) {
+        // 情况1：确认有人
+        current_state = SEAT_OCCUPIED;
+        fake_occupy_start_time = 0;
+        alarm_flag = false;
+    } else if (pressure_detected && !pir_detected) {
+        // 情况2：可能假占座
+        if (fake_occupy_start_time == 0) {
+            fake_occupy_start_time = HAL_GetTick();
+        } else {
+            uint32_t elapsed = HAL_GetTick() - fake_occupy_start_time;
+            if (elapsed >= 180000) {  // 3分钟
+                current_state = SEAT_FAKE_OCCUPY;
+                alarm_flag = true;
+                buzzer_alert();  // 蜂鸣器提示
+            }
+        }
+    } else if (!pressure_detected && pir_detected) {
+        // 情况3：过渡状态，保持当前状态
+        fake_occupy_start_time = 0;
+    } else {
+        // 情况4：确认无人
+        current_state = SEAT_IDLE;
+        fake_occupy_start_time = 0;
+        alarm_flag = false;
+    }
+}
+```
+
+
+============================================================
+4. MFRC-522 RFID读卡器驱动
+============================================================
+
+4.1 工作流程
+
+1. 初始化MFRC-522（SPI配置、寄存器设置）
+2. 循环检测是否有卡片靠近（PCD_RequestIdle）
+3. 检测到卡片后读取UID（PCD_Anticoll）
+4. UID去重处理（避免同一张卡连续读取重复上报）
+5. 封装JSON通过UART发送给ESP8266
+
+4.2 UID读取代码逻辑
+
+```c
+#include "mfrc522.h"
+
+MFRC522_t mfrc522;
+uint8_t last_uid[4] = {0};  // 记录上次读取的UID
+uint32_t last_read_time = 0;
+#define READ_INTERVAL  5000  // 5秒内不重复读取同一张卡
+
+void rfid_task(void) {
+    if (MFRC522_IsCardPresent(&mfrc522)) {
+        uint8_t uid[4];
+        if (MFRC522_ReadCardSerial(&mfrc522, uid)) {
+            // 检查是否是同一张卡且在时间窗口内
+            uint32_t now = HAL_GetTick();
+            bool is_same_card = (memcmp(uid, last_uid, 4) == 0);
+            bool within_interval = (now - last_read_time < READ_INTERVAL);
+            
+            if (!is_same_card || !within_interval) {
+                // 新卡片或超过间隔，上报OneNET
+                memcpy(last_uid, uid, 4);
+                last_read_time = now;
+                
+                // 封装JSON
+                char json_buf[128];
+                snprintf(json_buf, sizeof(json_buf),
+                    "{\"rfid_uid\":\"%02X%02X%02X%02X\"}",
+                    uid[0], uid[1], uid[2], uid[3]);
+                
+                // 通过UART发送给ESP8266
+                uart_send_to_esp8266(json_buf);
+            }
+        }
+    }
+}
+```
+
+4.3 共享读卡器设计
+
+本系统采用**共享读卡器**而非每个座位独立读卡器：
+
+- 一个共享读卡器服务多个座位（例如放在图书馆入口或楼层大厅）
+- 读卡器设备命名：Reader_{位置}_{编号}，例：Reader_Lobby_01
+- 学生先通过小程序预约座位，再到共享读卡器刷卡
+- Spring Boot根据UID查用户，再查该用户的当前订单，得到seat_id
+- 优势：降低硬件成本（不需要每个座位都装RFID）
+
+
+============================================================
+5. ESP8266 WiFi与OneNET MQTT通信
+============================================================
+
+5.1 ESP8266 AT指令初始化流程
+
+```c
+// 1. 测试AT连接
+AT\r\n
+→ OK
+
+// 2. 设置WiFi模式为STA
+AT+CWMODE=1\r\n
+→ OK
+
+// 3. 连接WiFi热点
+AT+CWJAP="WiFi名称","WiFi密码"\r\n
+→ WIFI CONNECTED
+→ WIFI GOT IP
+→ OK
+
+// 4. 设置单连接模式
+AT+CIPMUX=0\r\n
+→ OK
+
+// 5. 连接OneNET MQTT服务器
+AT+CIPSTART="TCP","183.230.40.39",1883\r\n
+→ CONNECT
+→ OK
+
+// 6. 进入透传模式
+AT+CIPMODE=1\r\n
+→ OK
+AT+CIPSEND\r\n
+→ >
+```
+
+5.2 MQTT协议连接OneNET
+
+OneNET MQTT连接参数：
+- 服务器地址：183.230.40.39
+- 端口：1883（非TLS）或 8883（TLS）
+- Client ID：{产品ID}.{设备名称}
+- Username：{产品ID}
+- Password：{鉴权信息}（Token或API-Key）
+
+MQTT Connect报文示例：
+```json
+{
+  "clientId": "123456.Seat_A_2F_001",
+  "username": "123456",
+  "password": "version=2018-10-31&res=products%2F123456&et=1700000000&method=md5&sign=xxxxx",
+  "keepalive": 120,
+  "cleanSession": true
+}
+```
+
+5.3 MQTT Topic设计
+
+OneNET物模型Topic规范：
+
+上行Topic（设备→云端）：
+- 属性上报：$sys/{pid}/{device-name}/thing/property/post
+- 事件上报：$sys/{pid}/{device-name}/thing/event/{event-id}/post
+- 设备上线：$sys/{pid}/{device-name}/online
+- 设备离线：$sys/{pid}/{device-name}/offline
+
+下行Topic（云端→设备）：
+- 属性下发：$sys/{pid}/{device-name}/thing/property/set
+- 服务调用：$sys/{pid}/{device-name}/thing/service/{service-id}/invoke
+
+其中：
+- pid = 产品ID
+- device-name = 设备名称（例：Seat_A_2F_001）
+
+5.4 属性上报JSON格式
+
+座位设备属性上报（每秒或状态变化时）：
+```json
+{
+  "id": "12345",
+  "version": "1.0",
+  "params": {
+    "pressure_adc": {
+      "value": 856,
+      "time": 1710000000000
+    },
+    "pir_state": {
+      "value": 1,
+      "time": 1710000000000
+    },
+    "alarm_flag": {
+      "value": false,
+      "time": 1710000000000
+    }
+  }
+}
+```
+
+RFID读卡器属性上报（刷卡时）：
+```json
+{
+  "id": "12346",
+  "version": "1.0",
+  "params": {
+    "rfid_uid": {
+      "value": "A1B2C3D4",
+      "time": 1710000001000
+    }
+  }
+}
+```
+
+5.5 属性下发JSON格式
+
+云端下发seat_display控制命令：
+```json
+{
+  "id": "67890",
+  "version": "1.0",
+  "params": {
+    "seat_display": {
+      "value": 2
+    },
+    "adc_threshold": {
+      "value": 200
+    },
+    "pir_hold_time": {
+      "value": 10
+    }
+  }
+}
+```
+
+设备收到后解析并执行：
+```c
+void handle_property_set(const char* json) {
+    cJSON* root = cJSON_Parse(json);
+    cJSON* params = cJSON_GetObjectItem(root, "params");
+    
+    cJSON* seat_display = cJSON_GetObjectItem(params, "seat_display");
+    if (seat_display) {
+        int display_value = cJSON_GetNumberValue(seat_display);
+        oled_update_display(display_value);
+    }
+    
+    cJSON* adc_threshold = cJSON_GetObjectItem(params, "adc_threshold");
+    if (adc_threshold) {
+        PRESSURE_THRESHOLD = cJSON_GetNumberValue(adc_threshold);
+    }
+    
+    cJSON_free(root);
+}
+```
+
+5.6 服务调用JSON格式
+
+强制释放服务：
+```json
+{
+  "id": "99999",
+  "version": "1.0",
+  "serviceId": "force_release",
+  "paras": {}
+}
+```
+
+蜂鸣器测试服务：
+```json
+{
+  "id": "99998",
+  "version": "1.0",
+  "serviceId": "buzzer_ctrl",
+  "paras": {
+    "duration_ms": 1000
+  }
+}
+```
+
+
+============================================================
+6. OLED显示逻辑
+============================================================
+
+6.1 显示内容映射
+
+seat_display值 → OLED显示内容：
+
+| seat_display | 含义           | OLED显示内容                    |
+|-------------|---------------|--------------------------------|
+| 0           | 空闲           | "空闲" + 绿色背景               |
+| 1           | 已预约/待签到   | "已预约" + 黄色背景             |
+| 2           | 使用中         | "使用中" + 红色背景 + 学号(可选) |
+| 3           | 暂离           | "暂离" + 灰色背景               |
+| 4           | 告警显示       | "告警" + 闪烁红色 + 蜂鸣器      |
+
+6.2 OLED刷新策略
+
+- 只在seat_display值变化时刷新（避免频繁I2C通信）
+- 收到OneNET下发的seat_display属性后立即刷新
+- 本地告警触发时主动刷新（显示告警界面）
+
+代码逻辑：
+```c
+int last_display_value = -1;
+
+void oled_update_display(int display_value) {
+    if (display_value == last_display_value) {
+        return;  // 值未变化，不刷新
+    }
+    
+    SSD1306_Clear();
+    
+    switch (display_value) {
+        case 0:
+            SSD1306_DrawString("空闲", FONT_LARGE, COLOR_GREEN);
+            break;
+        case 1:
+            SSD1306_DrawString("已预约", FONT_LARGE, COLOR_YELLOW);
+            break;
+        case 2:
+            SSD1306_DrawString("使用中", FONT_LARGE, COLOR_RED);
+            break;
+        case 3:
+            SSD1306_DrawString("暂离", FONT_LARGE, COLOR_GRAY);
+            break;
+        case 4:
+            SSD1306_DrawString("告警", FONT_LARGE, COLOR_RED);
+            SSD1306_Blink();  // 闪烁效果
+            buzzer_alert();
+            break;
+    }
+    
+    SSD1306_Refresh();
+    last_display_value = display_value;
+}
+```
+
+
+============================================================
+7. 数据上报策略
+============================================================
+
+7.1 上报类型
+
+1. **定时心跳上报**（无状态变化时）
+   - 频率：每60秒一次
+   - 内容：pressure_adc、pir_state、alarm_flag
+   - 目的：保活OneNET连接，让云端知道设备在线
+
+2. **状态变化立即上报**（关键事件）
+   - 触发条件：
+     - 压力值跨越阈值（从<阈值变为>阈值，或反之）
+     - PIR状态变化（从无人变为有人，或反之）
+     - alarm_flag变化（从false变为true，或反之）
+   - 目的：实时性要求高的场景
+
+3. **RFID刷卡事件上报**
+   - 触发条件：读取到新UID（去重后）
+   - 内容：rfid_uid
+   - 目的：触发Spring Boot签到流程
+
+7.2 上报代码逻辑
+
+```c
+uint32_t last_heartbeat_time = 0;
+#define HEARTBEAT_INTERVAL  60000  // 60秒
+
+uint16_t last_pressure_adc = 0;
+bool last_pir_state = false;
+bool last_alarm_flag = false;
+
+void mqtt_publish_task(void) {
+    uint32_t now = HAL_GetTick();
+    
+    // 检查是否需要心跳上报
+    bool need_heartbeat = (now - last_heartbeat_time >= HEARTBEAT_INTERVAL);
+    
+    // 检查是否有状态变化
+    bool state_changed = (
+        abs(current_pressure_adc - last_pressure_adc) > 50 ||  // ADC变化超过50
+        current_pir_state != last_pir_state ||
+        current_alarm_flag != last_alarm_flag
+    );
+    
+    if (need_heartbeat || state_changed) {
+        // 构造JSON
+        char json_buf[256];
+        snprintf(json_buf, sizeof(json_buf),
+            "{"
+            "\"id\":\"%lu\","
+            "\"version\":\"1.0\","
+            "\"params\":{"
+                "\"pressure_adc\":{\"value\":%d,\"time\":%lu},"
+                "\"pir_state\":{\"value\":%d,\"time\":%lu},"
+                "\"alarm_flag\":{\"value\":%s,\"time\":%lu}"
+            "}"
+            "}",
+            message_id++,
+            current_pressure_adc, now,
+            current_pir_state ? 1 : 0, now,
+            current_alarm_flag ? "true" : "false", now
+        );
+        
+        // 发布到OneNET
+        mqtt_publish("$sys/123456/Seat_A_2F_001/thing/property/post", json_buf);
+        
+        // 更新上次值
+        last_pressure_adc = current_pressure_adc;
+        last_pir_state = current_pir_state;
+        last_alarm_flag = current_alarm_flag;
+        last_heartbeat_time = now;
+    }
+}
+```
+
+7.3 流量估算
+
+假设100个座位设备：
+- 心跳上报：100设备 × 1次/60秒 = 1.67 QPS
+- 状态变化：高峰期假设每分钟20次变化 = 0.33 QPS
+- RFID刷卡：高峰期假设每分钟10次刷卡 = 0.17 QPS
+- 总QPS：约2.2 QPS
+
+OneNET免费套餐支持：
+- 设备数：100台（满足毕设需求）
+- 消息数：100万条/月（足够使用）
+
+
+============================================================
+8. 离线容错机制
+============================================================
+
+8.1 离线检测
+
+STM32检测ESP8266连接状态：
+- 方法1：定期发送AT指令，检查是否返回OK
+- 方法2：监听ESP8266的URC（Unsolicited Result Code），如"WIFI DISCONNECTED"
+
+代码逻辑：
+```c
+bool esp8266_connected = true;
+uint32_t last_at_check_time = 0;
+
+void check_esp8266_connection(void) {
+    uint32_t now = HAL_GetTick();
+    if (now - last_at_check_time >= 10000) {  // 每10秒检查一次
+        uart_send("AT\r\n");
+        // 等待响应，超时则认为断开
+        if (!wait_for_response("OK", 1000)) {
+            esp8266_connected = false;
+            oled_show_offline();
+        }
+        last_at_check_time = now;
+    }
+}
+```
+
+8.2 离线缓存（简化版）
+
+考虑到STM32F103C8T6的SRAM只有20KB，不做复杂的环形缓冲区：
+
+简化策略：
+- 离线期间，本地OLED显示和传感器融合判决正常工作
+- 只缓存**最后一次状态变化**（而不是所有历史记录）
+- 网络恢复后，上报最新状态即可（云端以最新状态为准）
+
+代码逻辑：
+```c
+typedef struct {
+    uint16_t pressure_adc;
+    bool pir_state;
+    bool alarm_flag;
+    uint32_t timestamp;
+    bool valid;  // 是否有缓存数据
+} CachedState;
+
+CachedState cached_state = {0};
+
+void on_state_change(uint16_t adc, bool pir, bool alarm) {
+    if (!esp8266_connected) {
+        // 离线，缓存最新状态
+        cached_state.pressure_adc = adc;
+        cached_state.pir_state = pir;
+        cached_state.alarm_flag = alarm;
+        cached_state.timestamp = HAL_GetTick();
+        cached_state.valid = true;
+    } else {
+        // 在线，立即上报
+        mqtt_publish_state(adc, pir, alarm);
+    }
+}
+
+void on_esp8266_reconnect(void) {
+    if (cached_state.valid) {
+        // 补发缓存的最新状态
+        mqtt_publish_state(
+            cached_state.pressure_adc,
+            cached_state.pir_state,
+            cached_state.alarm_flag
+        );
+        cached_state.valid = false;
+    }
+}
+```
+
+8.3 OneNET设备生命周期
+
+OneNET自动管理设备上下线：
+- 上线：设备成功连接MQTT并保持心跳，OneNET标记为online
+- 离线：超过一定时间（默认3倍keepalive）未收到心跳，OneNET标记为offline
+- Spring Boot订阅OneNET的上线/离线事件HTTP推送，更新seat_shadow表
+
+
+============================================================
+9. 固件结构设计
+============================================================
+
+9.1 主程序框架（基于HAL库）
+
+```c
+int main(void) {
+    // 1. 系统初始化
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_ADC1_Init();
+    MX_SPI1_Init();
+    MX_I2C1_Init();
+    MX_USART1_UART_Init();
+    
+    // 2. 外设初始化
+    SSD1306_Init();
+    MFRC522_Init(&mfrc522);
+    oled_show_boot_screen();
+    
+    // 3. 连接WiFi和OneNET
+    esp8266_init();
+    mqtt_connect_onenet();
+    
+    // 4. 主循环
+    while (1) {
+        // 传感器数据采集
+        current_pressure_adc = read_pressure_sensor();
+        current_pir_state = read_pir_sensor();
+        
+        // 双重感应融合判决
+        update_seat_state(current_pressure_adc > PRESSURE_THRESHOLD, current_pir_state);
+        
+        // RFID轮询
+        rfid_task();
+        
+        // MQTT发布任务
+        mqtt_publish_task();
+        
+        // ESP8266连接检查
+        check_esp8266_connection();
+        
+        // OneNET下行消息处理
+        mqtt_receive_task();
+        
+        // 延时1秒
+        HAL_Delay(1000);
+    }
+}
+```
+
+9.2 任务优先级
+
+1. 最高优先级：RFID刷卡事件（需要快速响应）
+2. 高优先级：MQTT下行消息处理（云端命令需要及时执行）
+3. 中优先级：传感器数据采集和融合判决
+4. 低优先级：MQTT心跳上报
+5. 最低优先级：ESP8266连接检查
+
+如果使用FreeRTOS，可以按优先级划分任务；裸机程序则通过轮询顺序保证。
+
+
+============================================================
+10. 调试与测试
+============================================================
+
+10.1 硬件调试步骤
+
+第1步：STM32最小系统测试
+- 烧录LED blink程序，确认MCU正常工作
+- 检查电源、晶振、复位电路
+
+第2步：传感器单体测试
+- FSR402：用万用表测量不同压力下的电阻值，确认ADC读数正常
+- HC-SR505：用手遮挡测试PIR输出电平变化
+- MFRC-522：用S50卡测试是否能正确读取UID
+
+第3步：OLED显示测试
+- 烧录OLED测试程序，确认I2C通信正常
+- 测试文字显示、图形绘制、刷新速度
+
+第4步：ESP8266 WiFi测试
+- 用串口助手手动发送AT指令，确认WiFi连接正常
+- 测试TCP连接到OneNET MQTT服务器
+
+第5步：OneNET平台配置
+- 创建产品，定义物模型（pressure_adc、pir_state、alarm_flag、seat_display等）
+- 创建设备，获取鉴权信息
+- 测试MQTT连接和属性上报
+
+10.2 常见问题与解决
+
+问题1：ESP8266无法连接WiFi
+- 检查WiFi名称和密码是否正确
+- 检查ESP8266供电是否稳定（需要3.3V至少500mA）
+- 尝试重启ESP8266（AT+RST）
+
+问题2：MQTT连接OneNET失败
+- 检查Client ID、Username、Password格式是否正确
+- 检查产品ID和设备名称是否匹配
+- 检查鉴权Token是否过期
+
+问题3：RFID读取不稳定
+- 检查SPI接线是否牢固
+- 调整MFRC-522的天线增益寄存器
+- 确认S50卡类型兼容（ISO14443A标准）
+
+问题4：压力传感器读数波动大
+- 增加滑动平均滤波的样本数
+- 检查分压电阻阻值是否合适（建议10kΩ）
+- 确认传感器安装位置是否稳固
+
+问题5：HC-SR505误触发
+- 调整灵敏度和延时电位器
+- 增加软件去抖动（连续2次高电平才判定）
+- 避免阳光直射和热源干扰
+
+
+============================================================
+11. 设备命名规范
+============================================================
+
+座位设备：
+- 格式：Seat_{区域}_{楼层}_{编号}
+- 示例：Seat_A_2F_001、Seat_B_1F_042
+- 规则：
+  - 区域：A/B/C等字母
+  - 楼层：1F/2F/3F等
+  - 编号：3位数字，从001开始
+
+共享读卡器：
+- 格式：Reader_{位置}_{编号}
+- 示例：Reader_Lobby_01、Reader_2F_East_02
+- 规则：
+  - 位置：Lobby（大厅）、2F_East（2楼东侧）等
+  - 编号：2位数字，从01开始
+
+重要：
+- 设备名称必须在OneNET产品中唯一
+- Spring Boot中的seat.device_name必须与OneNET设备名称对应
+- 小程序座位列表接口过滤READER类型设备
+
+
+============================================================
+12. 最终设备端功能清单
+============================================================
+
+必须完成：
+1. FSR402压力传感器ADC采集 + 滑动平均滤波
+2. HC-SR505人体红外GPIO检测 + 去抖动
+3. 双重感应融合判决算法（防假占座）
+4. MFRC-522 RFID UID读取 + 去重上报
+5. ESP8266 WiFi连接 + OneNET MQTT通信
+6. 属性上报（pressure_adc、pir_state、alarm_flag）
+7. 属性下发接收（seat_display、adc_threshold、pir_hold_time）
+8. OLED实时显示座位状态
+9. 蜂鸣器告警提示
+10. 离线检测和简化缓存
+
+选做：
+11. 按键测试功能（手动触发测试上报）
+12. LED指示灯（在线/离线状态指示）
+13. 完整的环形缓冲区离线缓存
+14. FreeRTOS多任务调度
+
+
+============================================================
+13. 答辩演示准备
+============================================================
+
+演示场景1：正常入座检测
+- 操作：坐在座位上
+- 预期：FSR402 ADC值上升超过阈值，HC-SR505输出高电平
+- OLED显示："使用中"（红色）
+- OneNET上报：pressure_adc=800, pir_state=1, alarm_flag=false
+
+演示场景2：假占座告警
+- 操作：将书包放在座位上，人不坐
+- 预期：FSR402 ADC值上升，但HC-SR505无信号
+- 3分钟后：蜂鸣器响，OLED显示"告警"（闪烁红）
+- OneNET上报：alarm_flag=true
+
+演示场景3：RFID刷卡
+- 操作：用S50卡在MFRC-522上刷卡
+- 预期：读取UID并通过UART发送给ESP8266
+- OneNET上报：rfid_uid="A1B2C3D4"
+- Spring Boot处理后，小程序座位变红
+
+演示场景4：云端控制OLED
+- 操作：Web管理端点击"强制释放"
+- 预期：Spring Boot调用OneNET OpenAPI下发seat_display=0
+- 设备收到MQTT消息，OLED显示"空闲"（绿色）
+
+演示场景5：离线容错
+- 操作：拔掉ESP8266天线或关闭WiFi热点
+- 预期：OLED仍正常显示座位状态，传感器继续工作
+- 恢复WiFi后：设备重新连接OneNET，上报最新状态

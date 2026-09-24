@@ -1,0 +1,128 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: library-seat
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/library_seat?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:root}
+
+  # ==========================================================
+  # 四端统一契约的关键配置
+  # 编码规范 §4：JSON 统一使用 snake_case
+  # 小程序、Web 管理端、OneNET 推送全部依赖这一条。
+  # 改成 camelCase 会同时打断三个端，不要动。
+  # ==========================================================
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: always
+    time-zone: Asia/Shanghai
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.example.libraryseat.entity
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+
+# ------------------------------------------------------------
+# JWT（编码规范 §36：只区分 STUDENT / ADMIN，不做 RBAC）
+# ------------------------------------------------------------
+jwt:
+  secret: ${JWT_SECRET:change-me-to-a-random-string-at-least-32-bytes-long}
+  expire-minutes: ${JWT_EXPIRE_MINUTES:720}
+
+# ------------------------------------------------------------
+# OneNET Studio（物联网平台，仅后端持有凭证）
+# 方案 §53「Web 想直接调用 OneNET：禁止」
+# 编码规范 §42「前端绝对不能直接拼 OneNET 请求」
+# => product-id / api-key 只能来自环境变量，前端仓库里不应出现任何 OneNET 凭证
+#
+# 注意：这里是 Studio（企业实例），域名 iot-api.heclouds.com。
+#       旧的 open.iot.10086.cn 是标准版，接口路径和鉴权方式都不同，不能混用。
+#       判定依据：本项目 product_id 是 10 位字母数字混合（Wh08f3Q71p），
+#       物模型带 profile.industryId/sceneId/categoryId，均为 Studio 特征。
+# ------------------------------------------------------------
+onenet:
+  base-url: ${ONENET_BASE_URL:https://iot-api.heclouds.com}
+  product-id: ${ONENET_PRODUCT_ID:Wh08f3Q71p}
+  # 产品级 API Key（base64 串）。签名前需先 base64 解码，见 util/OneNetTokenUtil
+  api-key: ${ONENET_API_KEY:}
+
+  # ---- token 参数（authorization 头）----
+  token-version: 2022-05-01
+  token-method: sha1
+  # 产品级 key 用 products/；若换成设备级 key，要改成 products/{pid}/devices/{name}
+  token-res-prefix: products/
+  token-expire-seconds: 3600
+
+  # ---- 下行 API 路径 ----
+  # 开发期无法连通 iot-api.heclouds.com 实测，Studio 的路径也随版本调整过。
+  # 因此全部留成配置：真机联调若返回 404，改这一行即可，不用改 Java、不用重新编译。
+  # 上线前请对照控制台「应用开发 → API 文档」核对。
+  property-set-path: /iot-api/device/property/set
+  service-invoke-path: /iot-api/device/service/invoke
+
+  # ---- 上行推送校验 ----
+  # /api/onenet/** 不校验 JWT（OneNET 不会带我们的 token），改用这个共享密钥，
+  # 校验逻辑在 security/JwtInterceptor 里。少了这道校验，
+  # 任何人都能伪造"设备上报"把座位状态刷成任意值，或伪造刷卡替别人签到。
+  #
+  # 配置方式（二选一，在 OneNET 控制台的数据推送/规则转发里填）：
+  #   1) 自定义请求头  X-Push-Secret: <本值>       ← 优先用这个
+  #   2) 推送 URL 后缀 ?push_secret=<本值>          ← 通道不支持自定义头时用
+  # 用 Postman 联调同理。
+  #
+  # 留空 = 不校验（开发期方便），每次放行都会打一条 WARN；部署到公网前必须设置。
+  push-secret: ${ONENET_PUSH_SECRET:}
+
+  connect-timeout-ms: 3000
+  read-timeout-ms: 5000
+
+  # 强制释放时下发的 seat_display 值（编码规范 §14.9 第 7 步）。
+  # 物模型里 seat_display 是 0-255 的 int32，哪个数字代表"恢复正常显示"
+  # 由 STM32 固件定义，按固件实际约定改。
+  display-clear-value: 0
+
+# ------------------------------------------------------------
+# 微信小程序（code 换 openid）
+# AppID 本身是公开的，可以进仓库；
+# AppSecret 只能通过环境变量 WECHAT_APP_SECRET 注入，不要写进任何文件。
+# ------------------------------------------------------------
+wechat:
+  app-id: ${WECHAT_APP_ID:wx0384c7d1e1e2d16d}
+  app-secret: ${WECHAT_APP_SECRET:}
+  code2-session-url: https://api.weixin.qq.com/sns/jscode2session
+  # 超时用上面 onenet.connect-timeout-ms / read-timeout-ms：
+  # 微信登录和 OneNET 下行共用一个 OkHttpClient（见 config/AppConfig）
+
+# ------------------------------------------------------------
+# 业务参数（方案 §28：统一放 application.yml，不做动态配置）
+# ------------------------------------------------------------
+seat:
+  # RESERVED 超过该时长未签到 -> TIMEOUT -> FREE
+  reserve-timeout-minutes: 15
+  # AWAY 超过该时长未回座 -> COMPLETED -> FREE
+  away-timeout-minutes: 30
+  # now - last_report_at 超过该值判定 online = false
+  # 设备心跳 60 秒一次，120 秒允许丢一个包（编码规范 §25）
+  device-offline-timeout-seconds: 120
+  # 下发给设备的默认 ADC 阈值，实际值以设备端实验结果为准
+  default-adc-threshold: 2000
+
+logging:
+  level:
+    com.example.libraryseat: info
+    # 真机联调时状态死活不更新，第一件事是打开下面这行：
+    # OneNetServiceImpl.normalize 会把 OneNET 推来的原始报文整段打在 DEBUG 上，
+    # 照着它改 normalize 一个方法就行，业务代码不用动。
+    com.example.libraryseat.service.impl: debug

@@ -1,0 +1,3051 @@
+智慧图书馆座位智能管理系统
+实际编码规范（最终统一开发版）
+============================================================
+
+一、文档定位
+============================================================
+
+本文件是在《智慧图书馆座位智能管理系统_四端统一最终方案》基础上继续落地形成的“实际编码规范”。
+
+依据：
+1. 《代茂源_开题报告(1).docx》
+2. 设备端方案_OneNET版
+3. 云端接入方案_OneNET版
+4. 小程序端方案_OneNET版
+5. 图书馆智慧座位系统_精简版_Web管理端方案
+
+本文件解决的问题：
+
+1. Spring Boot到底建立哪些包和Java文件
+2. MySQL到底建立哪些表
+3. Entity、DTO、VO分别怎么划分
+4. API到底有哪些，路径怎么统一
+5. OneNET数据格式怎么统一
+6. WebSocket消息怎么统一
+7. STM32、ESP8266、云端、小程序、Web分别先写什么代码
+8. 四端如何避免重复写业务逻辑
+9. 哪些功能明确不再增加
+10. 最终代码应该按照什么顺序开发
+
+最终原则：
+
+“一个功能只有一个业务归属，一个字段只有一种命名，一种状态只有一套定义。”
+
+开题报告明确了STM32、压力传感器、人体红外、RFID、ESP8266、MQTT、Spring Boot、MySQL、微信小程序和Vue 3 Web管理端等主要内容。本编码规范沿用这些核心内容，并将原方案中Redis复杂队列、EMQX双平台、复杂权限等内容进行简化。
+
+
+============================================================
+二、最终系统架构
+============================================================
+
+                         ┌──────────────────────┐
+                         │      微信小程序       │
+                         │   学生预约/签到/暂离   │
+                         └──────────┬───────────┘
+                                    │ HTTP / WSS
+                                    ↓
+┌────────────────┐        ┌──────────────────────┐
+│    STM32       │        │     Spring Boot      │
+│                │        │                      │
+│ FSR402         │        │ 用户/预约/状态机     │
+│ HC-SR501       │        │ RFID签到             │
+│ MFRC522        │──────→ │ 设备状态             │
+│ OLED           │        │ 超时释放             │
+│ 蜂鸣器         │        │ 统计/日志            │
+└───────┬────────┘        │ OneNET接入           │
+        │ UART            │ WebSocket            │
+        ↓                  └──────┬───────────────┘
+┌────────────────┐                │
+│    ESP8266     │                │ MySQL
+│ Wi-Fi + MQTT   │                ↓
+└───────┬────────┘        ┌──────────────────────┐
+        │ MQTT            │        MySQL         │
+        ↓                  └──────────────────────┘
+┌────────────────┐
+│     OneNET     │
+│ MQTT + 物模型  │
+└────────────────┘
+
+                              │ HTTP / WSS
+                              ↓
+                    ┌──────────────────────┐
+                    │      Vue 3 Web       │
+                    │      管理员后台       │
+                    └──────────────────────┘
+
+
+============================================================
+三、最终技术栈
+============================================================
+
+【设备端】
+STM32F103C8T6
+Keil MDK
+C语言
+FSR402
+HC-SR501
+MFRC522
+SSD1306 OLED
+ESP8266-01S
+
+【物联网】
+MQTT
+OneNET
+
+【云端】
+Java
+Spring Boot 3
+MyBatis-Plus
+MySQL 8
+WebSocket
+JWT
+OkHttp
+
+【小程序】
+微信小程序原生
+WXML
+WXSS
+JavaScript
+WebSocket
+
+【Web】
+Vue 3
+Vite
+Vue Router
+Pinia
+Axios
+Element Plus
+WebSocket
+
+明确不使用：
+FreeRTOS
+Redis分布式锁
+Redis延迟队列
+复杂MQ
+EMQX自建Broker
+OTA
+RBAC
+多管理员
+设备分组
+复杂报表
+
+
+============================================================
+四、统一命名规范
+============================================================
+
+数据库：
+全部使用snake_case。
+
+例如：
+device_id
+seat_id
+seat_code
+user_id
+rfid_uid
+pressure_adc
+pir_state
+alarm_flag
+last_report_at
+created_at
+updated_at
+
+Java：
+使用camelCase。
+
+例如：
+deviceId
+seatId
+seatCode
+userId
+rfidUid
+pressureAdc
+pirState
+alarmFlag
+lastReportAt
+
+JSON：
+统一使用snake_case。
+
+例如：
+{
+  "device_id": "SEAT_001",
+  "seat_id": 1,
+  "pressure_adc": 2450,
+  "pir_state": true,
+  "alarm_flag": false
+}
+
+不要出现：
+deviceId
+deviceID
+DeviceId
+
+三套名称。
+
+
+============================================================
+五、统一状态定义
+============================================================
+
+5.1 SeatStatus
+
+FREE = 0
+RESERVED = 1
+USING = 2
+AWAY = 3
+ALARM = 4
+
+含义：
+
+0 FREE       空闲
+1 RESERVED   已预约/等待签到
+2 USING      使用中
+3 AWAY       暂离
+4 ALARM      异常告警
+
+
+5.2 ReservationStatus
+
+RESERVED
+USING
+AWAY
+COMPLETED
+CANCELLED
+TIMEOUT
+
+
+5.3 Device状态
+
+online = true
+online = false
+
+设备离线不是SeatStatus。
+
+前端显示：
+seat.status + online + alarm。
+
+
+============================================================
+六、统一业务状态机
+============================================================
+
+正常流程：
+
+FREE
+  │
+  │ POST /api/reservations
+  ↓
+RESERVED
+  │
+  │ RFID签到
+  ↓
+USING
+  │
+  ├── 暂离 → AWAY → 回座 → USING
+  │
+  └── 离座 → COMPLETED → FREE
+
+
+预约取消：
+
+RESERVED → CANCELLED → FREE
+
+
+预约超时：
+
+RESERVED → TIMEOUT → FREE
+
+
+暂离超时：
+
+AWAY → COMPLETED → FREE
+
+
+管理员强制释放：
+
+RESERVED / USING / AWAY / ALARM
+                    ↓
+                   FREE
+
+
+异常：
+
+USING
+  ↓
+压力 > 阈值 + PIR持续无人
+  ↓
+ALARM
+
+
+人员重新回座：
+
+ALARM → USING
+
+
+============================================================
+七、Spring Boot完整目录
+============================================================
+
+library-seat/
+│
+├── src/main/java/com/example/libraryseat/
+│
+│   ├── LibrarySeatApplication.java
+│   │
+│   ├── controller/
+│   │   ├── AuthController.java
+│   │   ├── ReservationController.java
+│   │   ├── SeatController.java
+│   │   ├── StatisticsController.java
+│   │   ├── AdminController.java
+│   │   ├── AdminSeatController.java
+│   │   ├── AdminDeviceController.java
+│   │   ├── AdminRfidController.java
+│   │   ├── AdminStatisticsController.java
+│   │   └── OneNetController.java
+│   │
+│   ├── service/
+│   │   ├── UserService.java
+│   │   ├── AdminService.java
+│   │   ├── SeatService.java
+│   │   ├── ReservationService.java
+│   │   ├── RfidService.java
+│   │   ├── StudyRecordService.java
+│   │   ├── ViolationService.java
+│   │   ├── OperationLogService.java
+│   │   ├── DeviceService.java
+│   │   ├── StatisticsService.java
+│   │   ├── OneNetService.java
+│   │   └── WebSocketService.java
+│   │
+│   ├── service/impl/
+│   │   ├── UserServiceImpl.java
+│   │   ├── AdminServiceImpl.java
+│   │   ├── SeatServiceImpl.java
+│   │   ├── ReservationServiceImpl.java
+│   │   ├── RfidServiceImpl.java
+│   │   ├── StudyRecordServiceImpl.java
+│   │   ├── ViolationServiceImpl.java
+│   │   ├── OperationLogServiceImpl.java
+│   │   ├── DeviceServiceImpl.java
+│   │   ├── StatisticsServiceImpl.java
+│   │   ├── OneNetServiceImpl.java
+│   │   └── WebSocketServiceImpl.java
+│   │
+│   ├── mapper/
+│   │   ├── UserMapper.java
+│   │   ├── AdminUserMapper.java
+│   │   ├── SeatMapper.java
+│   │   ├── ReservationMapper.java
+│   │   ├── RfidUserMapper.java
+│   │   ├── SeatShadowMapper.java
+│   │   ├── StudyRecordMapper.java
+│   │   ├── ViolationMapper.java
+│   │   └── OperationLogMapper.java
+│   │
+│   ├── entity/
+│   │   ├── User.java
+│   │   ├── AdminUser.java
+│   │   ├── Seat.java
+│   │   ├── Reservation.java
+│   │   ├── RfidUser.java
+│   │   ├── SeatShadow.java
+│   │   ├── StudyRecord.java
+│   │   ├── Violation.java
+│   │   └── OperationLog.java
+│   │
+│   ├── dto/
+│   │   ├── LoginDTO.java
+│   │   ├── WechatLoginDTO.java
+│   │   ├── ReservationCreateDTO.java
+│   │   ├── RfidBindDTO.java
+│   │   ├── DeviceConfigDTO.java
+│   │   └── OneNetDataDTO.java
+│   │
+│   ├── vo/
+│   │   ├── LoginVO.java
+│   │   ├── UserVO.java
+│   │   ├── SeatVO.java
+│   │   ├── SeatDetailVO.java
+│   │   ├── ReservationVO.java
+│   │   ├── DashboardVO.java
+│   │   ├── DeviceVO.java
+│   │   ├── RfidBindVO.java
+│   │   ├── StatisticsVO.java
+│   │   └── CurrentReservationVO.java
+│   │
+│   ├── enums/
+│   │   ├── SeatStatus.java
+│   │   ├── ReservationStatus.java
+│   │   └── ViolationType.java
+│   │
+│   ├── config/
+│   │   ├── WebSocketConfig.java
+│   │   ├── JwtConfig.java
+│   │   ├── OneNetConfig.java
+│   │   ├── MyBatisPlusConfig.java
+│   │   └── CorsConfig.java
+│   │
+│   ├── websocket/
+│   │   └── SeatWebSocketHandler.java
+│   │
+│   ├── task/
+│   │   ├── ReservationTimeoutTask.java
+│   │   └── DeviceOfflineTask.java
+│   │
+│   ├── security/
+│   │   └── JwtInterceptor.java
+│   │
+│   ├── common/
+│   │   ├── Result.java
+│   │   ├── ErrorCode.java
+│   │   └── BusinessException.java
+│   │
+│   └── util/
+│       ├── JwtUtil.java
+│       ├── JsonUtil.java
+│       └── TimeUtil.java
+│
+└── src/main/resources/
+    ├── application.yml
+    └── mapper/
+
+
+说明：
+
+Controller = 接收请求
+Service = 业务逻辑
+Mapper = 数据库
+Entity = 数据库对象
+DTO = 前端/设备传入
+VO = 返回前端
+Task = 定时任务
+OneNetService = OneNET专属代码
+WebSocketService = 实时广播
+
+禁止Controller直接写SQL或直接完成完整业务流程。
+
+
+============================================================
+八、9张表最终SQL
+============================================================
+
+数据库：
+
+CREATE DATABASE IF NOT EXISTS library_seat
+DEFAULT CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+
+USE library_seat;
+
+
+------------------------------------------------------------
+8.1 user
+------------------------------------------------------------
+
+CREATE TABLE user (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    openid VARCHAR(64) NOT NULL UNIQUE,
+    nickname VARCHAR(64),
+    avatar_url VARCHAR(255),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
+);
+
+
+------------------------------------------------------------
+8.2 admin_user
+------------------------------------------------------------
+
+CREATE TABLE admin_user (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
+);
+
+
+------------------------------------------------------------
+8.3 seat
+------------------------------------------------------------
+
+CREATE TABLE seat (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    seat_code VARCHAR(50) NOT NULL UNIQUE,
+    area VARCHAR(50),
+    floor INT,
+    device_id VARCHAR(64) NOT NULL UNIQUE,
+    status TINYINT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
+);
+
+
+------------------------------------------------------------
+8.4 reservation
+------------------------------------------------------------
+
+CREATE TABLE reservation (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    seat_id BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    reserve_time DATETIME NOT NULL,
+    sign_time DATETIME NULL,
+    leave_time DATETIME NULL,
+    return_time DATETIME NULL,
+    release_time DATETIME NULL,
+    reserve_expire_at DATETIME NULL,
+    leave_expire_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_reservation_user_status(user_id, status),
+    INDEX idx_reservation_seat_status(seat_id, status),
+    INDEX idx_reservation_reserve_expire(reserve_expire_at),
+    INDEX idx_reservation_leave_expire(leave_expire_at)
+);
+
+
+------------------------------------------------------------
+8.5 rfid_user
+------------------------------------------------------------
+
+CREATE TABLE rfid_user (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    rfid_uid VARCHAR(64) NOT NULL UNIQUE,
+    user_id BIGINT NOT NULL UNIQUE,
+    bind_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+------------------------------------------------------------
+8.6 seat_shadow
+------------------------------------------------------------
+
+CREATE TABLE seat_shadow (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    seat_id BIGINT NOT NULL UNIQUE,
+    device_id VARCHAR(64) NOT NULL UNIQUE,
+    pressure_adc INT NOT NULL DEFAULT 0,
+    pir_state TINYINT NOT NULL DEFAULT 0,
+    alarm_flag TINYINT NOT NULL DEFAULT 0,
+    online TINYINT NOT NULL DEFAULT 0,
+    last_report_at DATETIME NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
+);
+
+
+------------------------------------------------------------
+8.7 study_record
+------------------------------------------------------------
+
+CREATE TABLE study_record (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    seat_id BIGINT NOT NULL,
+    reservation_id BIGINT NOT NULL UNIQUE,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NULL,
+    duration_minutes INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+------------------------------------------------------------
+8.8 violation
+------------------------------------------------------------
+
+CREATE TABLE violation (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NULL,
+    seat_id BIGINT NOT NULL,
+    type VARCHAR(30) NOT NULL,
+    description VARCHAR(255),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_violation_seat(seat_id),
+    INDEX idx_violation_user(user_id),
+    INDEX idx_violation_created(created_at)
+);
+
+
+------------------------------------------------------------
+8.9 operation_log
+------------------------------------------------------------
+
+CREATE TABLE operation_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    admin_id BIGINT NOT NULL,
+    operation VARCHAR(50) NOT NULL,
+    target VARCHAR(100),
+    description VARCHAR(255),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_operation_log_created(created_at)
+);
+
+
+说明：
+
+本方案保留9张表，是为了让论文的数据结构比较完整。
+
+如果后期时间不足，最后可以进一步压缩：
+rfid_user可以合并进user；
+violation可以合并到日志体系。
+
+但是第一版代码按照9表写。
+
+
+============================================================
+九、Entity实体类字段
+============================================================
+
+以下是Java实体字段，不是完整getter/setter。
+
+------------------------------------------------------------
+9.1 User.java
+------------------------------------------------------------
+
+Long id;
+String openid;
+String nickname;
+String avatarUrl;
+LocalDateTime createdAt;
+LocalDateTime updatedAt;
+
+
+------------------------------------------------------------
+9.2 AdminUser.java
+------------------------------------------------------------
+
+Long id;
+String username;
+String password;
+LocalDateTime createdAt;
+LocalDateTime updatedAt;
+
+
+------------------------------------------------------------
+9.3 Seat.java
+------------------------------------------------------------
+
+Long id;
+String seatCode;
+String area;
+Integer floor;
+String deviceId;
+Integer status;
+LocalDateTime createdAt;
+LocalDateTime updatedAt;
+
+
+------------------------------------------------------------
+9.4 Reservation.java
+------------------------------------------------------------
+
+Long id;
+Long userId;
+Long seatId;
+String status;
+LocalDateTime reserveTime;
+LocalDateTime signTime;
+LocalDateTime leaveTime;
+LocalDateTime returnTime;
+LocalDateTime releaseTime;
+LocalDateTime reserveExpireAt;
+LocalDateTime leaveExpireAt;
+LocalDateTime createdAt;
+LocalDateTime updatedAt;
+
+
+------------------------------------------------------------
+9.5 RfidUser.java
+------------------------------------------------------------
+
+Long id;
+String rfidUid;
+Long userId;
+LocalDateTime bindTime;
+LocalDateTime createdAt;
+
+
+------------------------------------------------------------
+9.6 SeatShadow.java
+------------------------------------------------------------
+
+Long id;
+Long seatId;
+String deviceId;
+Integer pressureAdc;
+Integer pirState;
+Integer alarmFlag;
+Integer online;
+LocalDateTime lastReportAt;
+LocalDateTime updatedAt;
+
+
+------------------------------------------------------------
+9.7 StudyRecord.java
+------------------------------------------------------------
+
+Long id;
+Long userId;
+Long seatId;
+Long reservationId;
+LocalDateTime startTime;
+LocalDateTime endTime;
+Integer durationMinutes;
+LocalDateTime createdAt;
+
+
+------------------------------------------------------------
+9.8 Violation.java
+------------------------------------------------------------
+
+Long id;
+Long userId;
+Long seatId;
+String type;
+String description;
+LocalDateTime createdAt;
+
+
+------------------------------------------------------------
+9.9 OperationLog.java
+------------------------------------------------------------
+
+Long id;
+Long adminId;
+String operation;
+String target;
+String description;
+LocalDateTime createdAt;
+
+
+============================================================
+十、DTO规范
+============================================================
+
+DTO只用于“输入”。
+
+------------------------------------------------------------
+10.1 WechatLoginDTO
+------------------------------------------------------------
+
+String code;
+
+
+------------------------------------------------------------
+10.2 LoginDTO
+------------------------------------------------------------
+
+String username;
+String password;
+
+
+------------------------------------------------------------
+10.3 ReservationCreateDTO
+------------------------------------------------------------
+
+Long seatId;
+
+
+------------------------------------------------------------
+10.4 RfidBindDTO
+------------------------------------------------------------
+
+String rfidUid;
+Long userId;
+
+
+------------------------------------------------------------
+10.5 DeviceConfigDTO
+------------------------------------------------------------
+
+Integer adcThreshold;
+
+
+------------------------------------------------------------
+10.6 OneNetDataDTO
+------------------------------------------------------------
+
+String deviceId;
+String seatId;
+Integer pressureAdc;
+Boolean pirState;
+Boolean alarmFlag;
+Long timestamp;
+
+
+原则：
+
+DTO不要混入数据库字段以外的业务处理。
+
+Controller拿DTO。
+Service处理DTO。
+
+
+============================================================
+十一、VO规范
+============================================================
+
+VO只用于“返回”。
+
+------------------------------------------------------------
+11.1 LoginVO
+------------------------------------------------------------
+
+String token;
+Long userId;
+String nickname;
+
+
+------------------------------------------------------------
+11.2 SeatVO
+------------------------------------------------------------
+
+Long seatId;
+String seatCode;
+String area;
+Integer floor;
+
+Integer status;
+Boolean alarm;
+Boolean online;
+
+String studentName;
+LocalDateTime reserveTime;
+LocalDateTime signTime;
+
+
+------------------------------------------------------------
+11.3 SeatDetailVO
+------------------------------------------------------------
+
+SeatVO基础字段
+
++
+Integer pressureAdc;
+Boolean pirState;
+LocalDateTime lastReportAt;
+Long currentReservationId;
+Long currentUserId;
+Integer studyMinutes;
+
+
+注意：
+
+小程序普通座位列表不一定返回pressureAdc。
+
+Web设备详情可以返回。
+
+这样可以避免学生端暴露过多设备数据。
+
+
+------------------------------------------------------------
+11.4 ReservationVO
+------------------------------------------------------------
+
+Long id;
+Long seatId;
+String seatCode;
+String status;
+LocalDateTime reserveTime;
+LocalDateTime signTime;
+LocalDateTime leaveTime;
+LocalDateTime returnTime;
+LocalDateTime releaseTime;
+
+
+------------------------------------------------------------
+11.5 CurrentReservationVO
+------------------------------------------------------------
+
+Long reservationId;
+Long seatId;
+String seatCode;
+String status;
+LocalDateTime reserveTime;
+LocalDateTime signTime;
+Integer durationMinutes;
+
+
+------------------------------------------------------------
+11.6 DeviceVO
+------------------------------------------------------------
+
+String deviceId;
+Long seatId;
+String seatCode;
+Boolean online;
+Integer pressureAdc;
+Boolean pirState;
+Boolean alarmFlag;
+LocalDateTime lastReportAt;
+
+
+------------------------------------------------------------
+11.7 DashboardVO
+------------------------------------------------------------
+
+Integer totalSeats;
+Integer freeSeats;
+Integer reservedSeats;
+Integer usingSeats;
+Integer awaySeats;
+Integer alarmSeats;
+
+Integer onlineDevices;
+Integer offlineDevices;
+
+Integer todayReservations;
+Integer todayUsers;
+Integer todayStudyMinutes;
+Integer todayViolations;
+
+
+------------------------------------------------------------
+11.8 StatisticsVO
+------------------------------------------------------------
+
+Integer totalStudyMinutes;
+Integer totalStudyCount;
+Integer averageStudyMinutes;
+
+
+============================================================
+十二、统一Result
+============================================================
+
+建议所有HTTP接口统一返回：
+
+{
+  "code": 200,
+  "message": "success",
+  "data": {}
+}
+
+
+Java：
+
+public class Result<T> {
+
+    private Integer code;
+
+    private String message;
+
+    private T data;
+
+    public static <T> Result<T> success(T data) {
+        return new Result<>(200, "success", data);
+    }
+
+    public static <T> Result<T> success() {
+        return new Result<>(200, "success", null);
+    }
+
+    public static <T> Result<T> error(String message) {
+        return new Result<>(500, message, null);
+    }
+}
+
+
+建议错误码：
+
+200 成功
+400 参数错误
+401 未登录
+403 无权限
+404 数据不存在
+409 业务冲突
+500 服务器错误
+
+
+预约冲突统一使用：
+
+409
+
+
+例如：
+
+{
+  "code": 409,
+  "message": "座位已被预约",
+  "data": null
+}
+
+
+============================================================
+十三、统一API总表
+============================================================
+
+【学生】
+
+POST   /api/auth/wechat-login
+
+GET    /api/seats
+GET    /api/seats/{seatId}
+
+GET    /api/reservations/current
+POST   /api/reservations
+POST   /api/reservations/{id}/cancel
+POST   /api/reservations/{id}/leave
+POST   /api/reservations/{id}/return
+POST   /api/reservations/{id}/release
+
+GET    /api/statistics/me
+
+
+【管理员】
+
+POST   /api/admin/login
+
+GET    /api/admin/dashboard
+
+GET    /api/admin/seats
+GET    /api/admin/seats/{id}
+POST   /api/admin/seats/{id}/clear-alarm
+POST   /api/admin/seats/{id}/force-release
+
+GET    /api/admin/devices
+POST   /api/admin/devices/{id}/config
+POST   /api/admin/devices/{id}/buzzer
+
+GET    /api/admin/rfid-binds
+POST   /api/admin/rfid-binds
+DELETE /api/admin/rfid-binds/{uid}
+
+GET    /api/admin/violations
+GET    /api/admin/statistics
+GET    /api/admin/logs
+
+
+【OneNET】
+
+POST   /api/onenet/device-data
+POST   /api/onenet/rfid-event
+
+
+【WebSocket】
+
+/ws/seats
+
+
+============================================================
+十四、每个API具体干什么
+============================================================
+
+14.1 POST /api/auth/wechat-login
+
+输入：
+
+{
+  "code": "微信code"
+}
+
+后端：
+1. code换openid
+2. 查询user
+3. 没有则创建
+4. 生成token
+5. 返回LoginVO
+
+
+14.2 GET /api/seats
+
+返回全馆座位合成状态。
+
+小程序只调用这个接口。
+
+返回：
+
+[
+  {
+    "seat_id": 1,
+    "seat_code": "A1-001",
+    "status": 0,
+    "alarm": false,
+    "online": true
+  }
+]
+
+
+14.3 POST /api/reservations
+
+输入：
+
+{
+  "seat_id": 1
+}
+
+Service必须检查：
+
+1. 座位存在
+2. 座位是FREE
+3. 当前用户没有进行中的预约
+4. 创建reservation
+5. 修改seat.status = RESERVED
+6. WebSocket广播
+
+必须使用事务。
+
+
+14.4 POST /api/reservations/{id}/cancel
+
+只允许取消：
+
+RESERVED
+
+不能取消：
+
+USING
+AWAY
+COMPLETED
+
+
+14.5 POST /api/reservations/{id}/leave
+
+只能：
+
+USING → AWAY
+
+写：
+
+leave_time
+leave_expire_at
+
+
+14.6 POST /api/reservations/{id}/return
+
+只能：
+
+AWAY → USING
+
+写：
+
+return_time
+
+
+14.7 POST /api/reservations/{id}/release
+
+只能：
+
+USING → COMPLETED
+
+同时：
+
+seat → FREE
+
+创建study_record。
+
+
+14.8 RFID签到
+
+不是学生端手动调用。
+
+流程：
+
+RFID设备
+→ OneNET
+→ Spring Boot
+→ RFIDService.signIn()
+
+
+Service：
+
+1. 查询rfid_uid
+2. 得到user_id
+3. 查询该用户RESERVED订单
+4. 修改为USING
+5. 写sign_time
+6. 修改seat.status
+7. WebSocket广播
+
+
+14.9 管理员force-release
+
+管理员：
+
+POST /api/admin/seats/{id}/force-release
+
+Service：
+
+1. 查询座位
+2. 查询当前订单
+3. 关闭订单
+4. seat → FREE
+5. 必要时生成study_record
+6. 写operation_log
+7. OneNET发送显示恢复指令
+8. WebSocket广播
+
+
+14.10 clear-alarm
+
+只处理：
+
+seat_shadow.alarm_flag = 0
+
+必要时同步设备OLED/蜂鸣器。
+
+同时写operation_log。
+
+
+============================================================
+十五、OneNET数据规范
+============================================================
+
+15.1 设备状态上报
+
+统一：
+
+{
+  "device_id": "SEAT_001",
+  "seat_id": "1",
+  "pressure_adc": 2450,
+  "pir_state": true,
+  "alarm_flag": false,
+  "timestamp": 1750000000
+}
+
+
+15.2 RFID事件
+
+{
+  "device_id": "READER_01",
+  "event": "rfid_scan",
+  "rfid_uid": "A1B2C3D4",
+  "timestamp": 1750000000
+}
+
+
+15.3 假占座事件
+
+{
+  "device_id": "SEAT_001",
+  "event": "fake_occupy",
+  "pressure_adc": 2450,
+  "pir_state": false,
+  "timestamp": 1750000000
+}
+
+
+15.4 心跳
+
+{
+  "device_id": "SEAT_001",
+  "online": true,
+  "timestamp": 1750000000
+}
+
+
+============================================================
+十六、OneNET物模型最终版本
+============================================================
+
+只保留：
+
+只读属性：
+
+pressure_adc
+pir_state
+alarm_flag
+
+可写属性：
+
+seat_display
+adc_threshold
+
+事件：
+
+rfid_scan
+fake_occupy
+
+服务：
+
+force_release
+buzzer_ctrl
+
+
+删除：
+
+pir_hold_time
+
+
+原因：
+
+PIR时间窗口由STM32本地算法控制即可。
+
+
+============================================================
+十七、OneNET代码位置
+============================================================
+
+OneNetController：
+
+接收OneNET HTTP推送。
+
+不要在Controller中处理预约。
+
+OneNetService：
+
+负责：
+1. 验证设备
+2. 解析数据
+3. 判断消息类型
+4. 调用SeatService
+5. 调用RfidService
+
+
+例如：
+
+@PostMapping("/device-data")
+public Result<Void> receiveDeviceData(
+        @RequestBody OneNetDataDTO dto) {
+
+    oneNetService.handleDeviceData(dto);
+
+    return Result.success();
+}
+
+
+真正业务：
+
+OneNetService
+    ↓
+SeatService
+    ↓
+数据库
+    ↓
+WebSocketService
+
+
+============================================================
+十八、WebSocket统一格式
+============================================================
+
+地址：
+
+/ws/seats
+
+
+所有客户端都接收同一种消息。
+
+
+18.1 座位变化
+
+{
+  "type": "SEAT_UPDATE",
+  "seat_id": 1,
+  "status": 2,
+  "alarm": false,
+  "online": true,
+  "timestamp": 1750000000
+}
+
+
+18.2 设备状态
+
+{
+  "type": "DEVICE_STATUS",
+  "seat_id": 1,
+  "online": false,
+  "timestamp": 1750000000
+}
+
+
+18.3 告警
+
+{
+  "type": "ALARM",
+  "seat_id": 1,
+  "alarm": true,
+  "timestamp": 1750000000
+}
+
+
+18.4 预约变化
+
+{
+  "type": "RESERVATION_UPDATE",
+  "seat_id": 1,
+  "status": 1,
+  "timestamp": 1750000000
+}
+
+
+前端原则：
+
+收到消息
+→ 找seat_id
+→ 更新该座位
+
+不要重新自己计算业务状态。
+
+
+============================================================
+十九、Spring Boot Service具体职责
+============================================================
+
+UserService：
+
+用户查询
+用户创建
+
+
+AdminService：
+
+管理员登录
+
+
+SeatService：
+
+座位查询
+座位状态修改
+座位详情
+设备状态更新
+座位业务状态合成
+
+
+ReservationService：
+
+预约
+取消
+签到
+暂离
+回座
+离座
+强制释放
+超时释放
+
+
+RfidService：
+
+RFID绑定
+RFID解绑
+RFID签到
+
+
+DeviceService：
+
+设备列表
+设备状态
+设备参数
+
+
+StudyRecordService：
+
+创建学习记录
+个人学习时长
+全馆学习统计
+
+
+ViolationService：
+
+创建违规
+查询违规
+
+
+OperationLogService：
+
+管理员操作记录
+
+
+StatisticsService：
+
+Dashboard
+个人统计
+全馆统计
+
+
+OneNetService：
+
+OneNET接收
+OneNET OpenAPI
+设备控制
+
+
+WebSocketService：
+
+广播座位变化
+
+
+============================================================
+二十、Spring Boot最核心代码顺序
+============================================================
+
+不要一上来写所有Controller。
+
+严格按照：
+
+1. Entity
+2. Mapper
+3. Service
+4. ServiceImpl
+5. DTO
+6. VO
+7. Controller
+8. 测试
+
+
+第一批：
+
+User
+AdminUser
+Seat
+
+
+第二批：
+
+Reservation
+RfidUser
+
+
+第三批：
+
+SeatShadow
+
+
+第四批：
+
+StudyRecord
+Violation
+OperationLog
+
+
+============================================================
+二十一、预约Service核心伪代码
+============================================================
+
+@Transactional
+public void createReservation(Long userId, Long seatId) {
+
+    Seat seat = seatMapper.selectById(seatId);
+
+    if (seat == null) {
+        throw new BusinessException("座位不存在");
+    }
+
+    if (!seat.getStatus().equals(SeatStatus.FREE.getCode())) {
+        throw new BusinessException("座位不可预约");
+    }
+
+    Reservation current =
+        reservationMapper.findCurrentByUserId(userId);
+
+    if (current != null) {
+        throw new BusinessException("已有进行中的预约");
+    }
+
+    Reservation reservation = new Reservation();
+
+    reservation.setUserId(userId);
+    reservation.setSeatId(seatId);
+    reservation.setStatus("RESERVED");
+    reservation.setReserveTime(LocalDateTime.now());
+
+    reservation.setReserveExpireAt(
+        LocalDateTime.now().plusMinutes(15)
+    );
+
+    reservationMapper.insert(reservation);
+
+    seat.setStatus(SeatStatus.RESERVED.getCode());
+
+    seatMapper.updateById(seat);
+
+    webSocketService.broadcastSeatUpdate(seatId);
+}
+
+
+============================================================
+二十二、RFID签到核心伪代码
+============================================================
+
+public void signIn(String rfidUid) {
+
+    RfidUser rfidUser =
+        rfidUserMapper.findByUid(rfidUid);
+
+    if (rfidUser == null) {
+        return;
+    }
+
+    Reservation reservation =
+        reservationMapper.findReservedByUserId(
+            rfidUser.getUserId()
+        );
+
+    if (reservation == null) {
+        return;
+    }
+
+    reservation.setStatus("USING");
+    reservation.setSignTime(LocalDateTime.now());
+
+    reservationMapper.updateById(reservation);
+
+    Seat seat =
+        seatMapper.selectById(reservation.getSeatId());
+
+    seat.setStatus(SeatStatus.USING.getCode());
+
+    seatMapper.updateById(seat);
+
+    webSocketService.broadcastSeatUpdate(
+        reservation.getSeatId()
+    );
+}
+
+
+============================================================
+二十三、暂离/回座/离座代码原则
+============================================================
+
+leave：
+
+USING
+→ AWAY
+
+returnSeat：
+
+AWAY
+→ USING
+
+release：
+
+USING
+→ COMPLETED
+
+并：
+
+seat → FREE
+
+study_record：
+
+start_time = sign_time
+end_time = release_time
+duration_minutes = 两者差值
+
+
+如果中间发生暂离：
+
+毕业设计阶段可以直接按照整个USING周期统计。
+
+如果以后需要更精确，再拆分多个学习时间段。
+
+不要现在就复杂化。
+
+
+============================================================
+二十四、超时任务
+============================================================
+
+ReservationTimeoutTask：
+
+每60秒运行。
+
+逻辑：
+
+A：
+
+status = RESERVED
+AND reserve_expire_at < now
+
+→ TIMEOUT
+→ seat FREE
+
+
+B：
+
+status = AWAY
+AND leave_expire_at < now
+
+→ COMPLETED
+→ seat FREE
+
+
+每次状态变化：
+
+数据库
++
+WebSocket
+
+
+不使用Redis延迟队列。
+
+
+============================================================
+二十五、设备离线任务
+============================================================
+
+DeviceOfflineTask：
+
+每60秒运行。
+
+如果：
+
+now - last_report_at > OFFLINE_TIMEOUT
+
+则：
+
+online = false
+
+并：
+
+WebSocket广播。
+
+
+OFFLINE_TIMEOUT：
+
+建议先设置：
+
+120秒
+
+
+这样设备60秒心跳允许一次丢包。
+
+
+============================================================
+二十六、Web端代码结构
+============================================================
+
+src/
+├── api/
+│   ├── auth.js
+│   ├── seat.js
+│   ├── device.js
+│   ├── rfid.js
+│   ├── statistics.js
+│   └── admin.js
+│
+├── views/
+│   ├── Login.vue
+│   ├── Dashboard.vue
+│   ├── SeatManage.vue
+│   ├── DeviceManage.vue
+│   ├── RfidManage.vue
+│   └── ViolationManage.vue
+│
+├── components/
+│   ├── SeatCard.vue
+│   ├── SeatGrid.vue
+│   └── StatCard.vue
+│
+├── router/
+│   └── index.js
+│
+├── stores/
+│   └── seat.js
+│
+├── utils/
+│   ├── request.js
+│   └── websocket.js
+│
+├── App.vue
+└── main.js
+
+
+============================================================
+二十七、Web端开发顺序
+============================================================
+
+1. main.js
+2. router
+3. Axios
+4. 登录
+5. SeatGrid
+6. SeatCard
+7. Dashboard
+8. 设备管理
+9. RFID
+10. 违规
+11. WebSocket
+
+
+第一阶段不要做漂亮UI。
+
+先做到：
+
+GET /api/admin/seats
+
+能显示：
+
+绿色/黄色/红色/灰色。
+
+
+============================================================
+二十八、微信小程序代码结构
+============================================================
+
+miniprogram/
+├── pages/
+│   ├── login/
+│   │   ├── login.wxml
+│   │   ├── login.wxss
+│   │   └── login.js
+│   │
+│   ├── seats/
+│   │   ├── seats.wxml
+│   │   ├── seats.wxss
+│   │   └── seats.js
+│   │
+│   ├── reservation/
+│   │   ├── reservation.wxml
+│   │   ├── reservation.wxss
+│   │   └── reservation.js
+│   │
+│   └── mine/
+│       ├── mine.wxml
+│       ├── mine.wxss
+│       └── mine.js
+│
+├── utils/
+│   ├── request.js
+│   ├── websocket.js
+│   └── auth.js
+│
+├── app.js
+├── app.json
+└── app.wxss
+
+
+============================================================
+二十九、小程序开发顺序
+============================================================
+
+1. 登录
+2. request.js
+3. seats页面
+4. 座位状态颜色
+5. 预约
+6. 我的预约
+7. 暂离
+8. 回座
+9. 离座
+10. WebSocket
+11. 学习统计
+
+
+不要先做WebSocket。
+
+先保证HTTP完整跑通。
+
+然后加入WebSocket。
+
+
+============================================================
+三十、STM32代码结构
+============================================================
+
+Core/
+└── main.c
+
+BSP/
+├── bsp_adc.c
+├── bsp_gpio.c
+├── bsp_uart.c
+├── bsp_spi.c
+├── bsp_i2c.c
+└── bsp_delay.c
+
+Drivers/
+├── mfrc522.c
+├── oled.c
+└── esp8266.c
+
+Sensors/
+├── fsr402.c
+└── pir.c
+
+Application/
+├── seat_logic.c
+├── seat_logic.h
+├── device_protocol.c
+├── device_protocol.h
+├── alarm.c
+├── alarm.h
+├── display.c
+└── display.h
+
+Config/
+└── device_config.h
+
+
+============================================================
+三十一、STM32具体开发顺序
+============================================================
+
+第一：
+
+ADC
+
+确认：
+
+FSR402能读到ADC。
+
+
+第二：
+
+GPIO
+
+确认：
+
+PIR可以读取。
+
+
+第三：
+
+SPI
+
+确认：
+
+MFRC522可以读取UID。
+
+
+第四：
+
+I2C
+
+确认：
+
+OLED显示文字。
+
+
+第五：
+
+UART
+
+确认：
+
+STM32可以向ESP8266发送字符串。
+
+
+第六：
+
+传感器融合
+
+完成：
+
+pressure + PIR
+
+
+第七：
+
+OLED状态显示。
+
+
+第八：
+
+蜂鸣器。
+
+
+第九：
+
+RFID。
+
+
+第十：
+
+JSON。
+
+
+第十一：
+
+ESP8266 MQTT。
+
+
+============================================================
+三十二、设备端状态结构体
+============================================================
+
+建议：
+
+typedef struct
+{
+    uint16_t pressure_adc;
+    uint8_t pir_state;
+    uint8_t alarm_flag;
+    uint8_t network_online;
+} SeatSensorState;
+
+
+不要在STM32定义：
+
+RESERVED
+USING
+AWAY
+
+这些是云端业务状态。
+
+STM32只知道：
+
+传感器状态
++
+本地报警状态。
+
+
+============================================================
+三十三、STM32设备协议
+============================================================
+
+STM32 → ESP8266：
+
+{
+  "device_id":"SEAT_001",
+  "seat_id":"1",
+  "pressure_adc":2450,
+  "pir_state":1,
+  "alarm_flag":0,
+  "timestamp":1750000000
+}
+
+
+RFID：
+
+{
+  "device_id":"READER_01",
+  "event":"rfid_scan",
+  "rfid_uid":"A1B2C3D4",
+  "timestamp":1750000000
+}
+
+
+ESP8266原则：
+
+不要解析复杂业务。
+
+只负责：
+
+收到STM32字符串
+→ MQTT发送
+
+收到MQTT控制
+→ UART发送给STM32。
+
+
+============================================================
+三十四、四端真正的代码边界
+============================================================
+
+【STM32】
+
+可以写：
+
+if (pressure > threshold && pir == 1)
+    normal;
+
+if (pressure > threshold && pir == 0)
+    suspicious;
+
+禁止写：
+
+if (seat.status == RESERVED)
+if (user_id == ...)
+if (reservation...)
+if (seat_id已经被预约...)
+
+
+【ESP8266】
+
+可以写：
+
+WiFi连接
+MQTT连接
+断线重连
+数据转发
+
+禁止写：
+
+预约
+签到
+用户
+
+
+【Spring Boot】
+
+负责所有业务判断。
+
+这是整个系统唯一的“业务大脑”。
+
+
+【微信小程序】
+
+只负责：
+
+显示
+点击
+请求
+WebSocket
+
+
+【Web】
+
+只负责：
+
+管理显示
+管理员操作
+请求
+WebSocket
+
+
+============================================================
+三十五、管理员登录
+============================================================
+
+管理员账号固定为数据库中的一条admin_user。
+
+不做：
+
+超级管理员
+普通管理员
+角色
+权限树
+
+密码必须使用BCrypt。
+
+不要把密码明文写在Java代码里。
+
+
+============================================================
+三十六、JWT
+============================================================
+
+学生：
+
+Authorization:
+Bearer STUDENT_TOKEN
+
+
+管理员：
+
+Authorization:
+Bearer ADMIN_TOKEN
+
+
+JWT中建议：
+
+userId
+role
+expire
+
+
+角色：
+
+STUDENT
+ADMIN
+
+
+这里的role只是区分学生/管理员。
+
+不扩展RBAC。
+
+
+============================================================
+三十七、前后端权限
+============================================================
+
+学生Token：
+
+可以访问：
+
+/api/seats
+/api/reservations
+/api/statistics/me
+
+
+不能访问：
+
+/api/admin/*
+
+
+管理员Token：
+
+可以访问：
+
+/api/admin/*
+
+
+不能修改其他学生的reservation。
+
+
+============================================================
+三十八、WebSocket连接流程
+============================================================
+
+Web：
+
+登录
+↓
+得到Token
+↓
+连接：
+
+/ws/seats?token=xxx
+
+小程序：
+
+登录
+↓
+得到Token
+↓
+连接：
+
+/ws/seats?token=xxx
+
+
+收到：
+
+SEAT_UPDATE
+
+只更新对应seat_id。
+
+
+断线：
+
+3秒后重新连接。
+
+
+重新连接成功：
+
+重新调用：
+
+GET /api/seats
+
+确保数据恢复。
+
+
+不做复杂指数退避。
+
+
+============================================================
+三十九、Web端状态颜色
+============================================================
+
+FREE：
+
+绿色
+
+
+RESERVED：
+
+黄色
+
+
+USING：
+
+红色
+
+
+AWAY：
+
+灰色
+
+
+ALARM：
+
+红色闪烁
+
+
+offline：
+
+在原状态上增加：
+
+“离线”
+
+
+注意：
+
+offline不是覆盖status。
+
+
+============================================================
+四十、小程序状态颜色
+============================================================
+
+和Web完全一样：
+
+0 → 绿色
+1 → 黄色
+2 → 红色
+3 → 灰色
+4 → 红色闪烁
+
+这样论文截图和代码逻辑统一。
+
+
+============================================================
+四十一、OneNET控制方向
+============================================================
+
+管理员：
+
+强制释放
+清除告警
+蜂鸣器测试
+修改ADC阈值
+
+Spring Boot：
+
+调用OneNET OpenAPI
+
+OneNET：
+
+下发设备
+
+ESP8266：
+
+接收MQTT
+
+STM32：
+
+执行
+
+链路：
+
+Web
+ ↓
+Spring Boot
+ ↓
+OneNET
+ ↓
+MQTT
+ ↓
+ESP8266
+ ↓
+UART
+ ↓
+STM32
+
+
+============================================================
+四十二、设备控制JSON
+============================================================
+
+蜂鸣器：
+
+{
+  "service": "buzzer_ctrl",
+  "duration_ms": 1000
+}
+
+
+OLED：
+
+{
+  "property": "seat_display",
+  "value": 0
+}
+
+
+阈值：
+
+{
+  "property": "adc_threshold",
+  "value": 2000
+}
+
+
+强制释放：
+
+{
+  "service": "force_release"
+}
+
+
+注意：
+
+这些只是业务层统一数据格式。
+
+实际OneNET API封装格式统一写在：
+
+OneNetService
+
+前端绝对不能直接拼OneNET请求。
+
+
+============================================================
+四十三、学习时间统计
+============================================================
+
+最简单方案：
+
+签到：
+
+study_record.start_time = reservation.sign_time
+
+
+离座：
+
+study_record.end_time = now
+
+duration_minutes =
+TIMESTAMPDIFF(MINUTE, start_time, end_time)
+
+
+个人统计：
+
+SUM(duration_minutes)
+
+
+Dashboard：
+
+SUM(duration_minutes)
+
+
+暂离阶段：
+
+本科毕设暂时不拆成多段学习记录。
+
+这样数据库和统计都简单。
+
+
+============================================================
+四十四、违规定义
+============================================================
+
+只保留三类：
+
+FAKE_OCCUPY
+RESERVATION_TIMEOUT
+AWAY_TIMEOUT
+
+
+不要增加：
+
+积分
+信用分
+黑名单等级
+处罚等级
+
+
+Web只查询和展示。
+
+
+============================================================
+四十五、异常处理规范
+============================================================
+
+设备数据错误：
+
+返回：
+
+400
+
+
+用户未登录：
+
+401
+
+
+管理员无权限：
+
+403
+
+
+座位不存在：
+
+404
+
+
+座位已被预约：
+
+409
+
+
+系统异常：
+
+500
+
+
+所有异常：
+
+BusinessException
++
+GlobalExceptionHandler
+
+统一处理。
+
+
+============================================================
+四十六、开发时必须写的测试顺序
+============================================================
+
+第一阶段：
+
+Postman测试：
+
+GET /api/seats
+
+
+第二阶段：
+
+Postman：
+
+POST /api/reservations
+
+
+第三阶段：
+
+Postman：
+
+POST /api/reservations/{id}/leave
+
+
+第四阶段：
+
+Postman：
+
+POST /api/reservations/{id}/return
+
+
+第五阶段：
+
+Postman：
+
+POST /api/reservations/{id}/release
+
+
+第六阶段：
+
+模拟RFID：
+
+POST /api/onenet/rfid-event
+
+
+第七阶段：
+
+模拟设备：
+
+POST /api/onenet/device-data
+
+
+第八阶段：
+
+浏览器测试WebSocket。
+
+
+第九阶段：
+
+接入STM32。
+
+
+第十阶段：
+
+小程序。
+
+
+第十一阶段：
+
+Web。
+
+
+============================================================
+四十七、实际编码先写哪个文件
+============================================================
+
+严格按照以下文件顺序。
+
+------------------------------------------------------------
+第一批：数据库
+------------------------------------------------------------
+
+01_schema.sql
+
+先把9张表创建出来。
+
+
+------------------------------------------------------------
+第二批：Spring Boot基础
+------------------------------------------------------------
+
+1. LibrarySeatApplication.java
+2. application.yml
+3. Result.java
+4. BusinessException.java
+5. ErrorCode.java
+6. MyBatisPlusConfig.java
+
+
+------------------------------------------------------------
+第三批：Entity
+------------------------------------------------------------
+
+1. User.java
+2. AdminUser.java
+3. Seat.java
+4. Reservation.java
+5. RfidUser.java
+6. SeatShadow.java
+7. StudyRecord.java
+8. Violation.java
+9. OperationLog.java
+
+
+------------------------------------------------------------
+第四批：Mapper
+------------------------------------------------------------
+
+按Entity一一对应。
+
+
+------------------------------------------------------------
+第五批：枚举
+------------------------------------------------------------
+
+1. SeatStatus.java
+2. ReservationStatus.java
+3. ViolationType.java
+
+
+------------------------------------------------------------
+第六批：Service
+------------------------------------------------------------
+
+先写：
+
+SeatService
+ReservationService
+
+因为这两个是系统核心。
+
+
+------------------------------------------------------------
+第七批：预约
+------------------------------------------------------------
+
+先完成：
+
+POST /api/reservations
+POST /api/reservations/{id}/cancel
+GET /api/reservations/current
+
+
+确认：
+
+预约
+取消
+查询
+
+全部正常。
+
+
+------------------------------------------------------------
+第八批：签到
+------------------------------------------------------------
+
+1. RfidService
+2. OneNetService
+3. /api/onenet/rfid-event
+
+确认：
+
+UID
+→ 用户
+→ 当前预约
+→ USING
+
+
+------------------------------------------------------------
+第九批：暂离/回座/离座
+------------------------------------------------------------
+
+ReservationService：
+
+leave()
+returnSeat()
+release()
+
+
+------------------------------------------------------------
+第十批：WebSocket
+------------------------------------------------------------
+
+1. WebSocketConfig
+2. SeatWebSocketHandler
+3. WebSocketService
+
+
+------------------------------------------------------------
+第十一批：OneNET设备数据
+------------------------------------------------------------
+
+1. OneNetController
+2. OneNetDataDTO
+3. OneNetService
+
+
+完成：
+
+pressure_adc
+pir_state
+alarm_flag
+online
+
+
+------------------------------------------------------------
+第十二批：假占座
+------------------------------------------------------------
+
+设备：
+
+pressure + PIR
+
+云端：
+
+alarm_flag
+
+数据库：
+
+seat_shadow
+violation
+
+
+------------------------------------------------------------
+第十三批：超时
+------------------------------------------------------------
+
+ReservationTimeoutTask
+DeviceOfflineTask
+
+
+------------------------------------------------------------
+第十四批：学习统计
+------------------------------------------------------------
+
+StudyRecordService
+StatisticsService
+
+
+------------------------------------------------------------
+第十五批：管理员
+------------------------------------------------------------
+
+AdminController
+AdminSeatController
+AdminDeviceController
+AdminRfidController
+
+
+------------------------------------------------------------
+第十六批：微信小程序
+------------------------------------------------------------
+
+login
+→ seats
+→ reservation
+→ mine
+→ WebSocket
+
+
+------------------------------------------------------------
+第十七批：Vue Web
+------------------------------------------------------------
+
+login
+→ dashboard
+→ seat
+→ device
+→ RFID
+→ violation
+
+
+------------------------------------------------------------
+第十八批：整体联调
+------------------------------------------------------------
+
+STM32
+→ ESP8266
+→ OneNET
+→ Spring Boot
+→ MySQL
+→ WebSocket
+→ 小程序/Web
+
+
+============================================================
+四十八、建议的Git开发节点
+============================================================
+
+如果使用Git，每完成一个阶段提交一次：
+
+commit 01:
+init-project
+
+commit 02:
+database
+
+commit 03:
+entity-mapper
+
+commit 04:
+seat-query
+
+commit 05:
+reservation
+
+commit 06:
+rfid-sign-in
+
+commit 07:
+leave-return-release
+
+commit 08:
+websocket
+
+commit 09:
+onenet-device
+
+commit 10:
+alarm
+
+commit 11:
+timeout
+
+commit 12:
+statistics
+
+commit 13:
+wechat-mini-program
+
+commit 14:
+web-admin
+
+commit 15:
+integration-test
+
+
+============================================================
+四十九、明确删除清单
+============================================================
+
+不要再添加：
+
+1. FreeRTOS
+2. OTA
+3. 固件升级
+4. 多管理员
+5. 超级管理员
+6. RBAC
+7. Redis分布式锁
+8. Redis延迟队列
+9. Redis座位缓存
+10. 自建EMQX
+11. Kafka
+12. RabbitMQ
+13. 设备分组
+14. 批量设备配置
+15. 远程重启
+16. Excel导出
+17. PDF导出
+18. 用户画像
+19. 复杂热力图
+20. 复杂推荐
+21. 积分系统
+22. 信用分
+23. 黑名单等级
+24. 复杂消息中心
+25. 复杂WebSocket优化
+26. 指数退避
+27. pending_display持久队列
+28. pir_hold_time云端配置
+29. 多套物联网平台
+30. 复杂历史设备缓存
+
+
+============================================================
+五十、最终项目完成标准
+============================================================
+
+毕业设计代码不是以“代码量”为标准。
+
+达到以下条件即可认为核心系统完成：
+
+□ STM32能读取压力
+□ STM32能读取PIR
+□ STM32能读取RFID
+□ OLED能显示
+□ 蜂鸣器能报警
+□ ESP8266能联网
+□ MQTT能连接OneNET
+□ OneNET能收到设备数据
+□ Spring Boot能接收设备数据
+□ MySQL能保存数据
+□ 小程序能看到座位
+□ 小程序能预约
+□ RFID能自动签到
+□ 可以暂离
+□ 可以回座
+□ 可以离座
+□ 能自动释放超时预约
+□ 能自动释放超时暂离
+□ 能检测假占座
+□ WebSocket能实时刷新
+□ Web管理端能查看座位
+□ Web能查看设备
+□ Web能查看告警
+□ Web能强制释放
+□ Web能绑定RFID
+□ 能查看基础统计
+□ 能查看操作日志
+
+
+============================================================
+五十一、最终论文/答辩对应关系
+============================================================
+
+第一章：
+项目背景和意义
+
+第二章：
+系统总体设计
+
+对应：
+
+STM32
+ESP8266
+OneNET
+Spring Boot
+MySQL
+小程序
+Web
+
+
+第三章：
+硬件设计
+
+对应：
+
+STM32
+FSR402
+HC-SR501
+MFRC522
+OLED
+蜂鸣器
+ESP8266
+
+
+第四章：
+软件设计
+
+对应：
+
+STM32程序
+MQTT
+OneNET
+Spring Boot
+数据库
+状态机
+WebSocket
+
+
+第五章：
+前端设计
+
+对应：
+
+微信小程序
+Vue3 Web
+
+
+第六章：
+系统测试
+
+对应：
+
+压力阈值
+PIR
+RFID
+假占座
+预约
+签到
+暂离
+回座
+离座
+断网
+设备离线
+WebSocket
+
+
+第七章：
+总结
+
+
+============================================================
+五十二、最终一句话开发规则
+============================================================
+
+STM32只负责“感知和执行”。
+
+ESP8266只负责“联网和转发”。
+
+OneNET只负责“物联网接入”。
+
+Spring Boot负责“全部业务逻辑”。
+
+MySQL负责“持久化”。
+
+WebSocket负责“实时通知”。
+
+微信小程序负责“学生操作和展示”。
+
+Vue Web负责“管理员操作和展示”。
+
+任何代码如果不知道应该写在哪里，就按照这八句话判断。
+
+
+============================================================
+五十三、最终架构冻结
+============================================================
+
+从现在开始：
+
+旧方案与本文件冲突：
+
+以本文件为准。
+
+前端想增加业务：
+
+先确认Spring Boot有没有对应业务。
+
+Spring Boot想增加设备业务：
+
+先确认是否属于设备层。
+
+设备端想判断预约：
+
+禁止。
+
+小程序想判断压力：
+
+禁止。
+
+Web想直接调用OneNET：
+
+禁止。
+
+OneNET想处理预约：
+
+禁止。
+
+数据库想保存大量设备历史：
+
+暂时禁止。
+
+Redis想加入：
+
+除非后续出现实际性能问题，否则禁止。
+
+最终目标：
+
+“结构简单、代码统一、功能完整、容易调试、容易写论文、容易答辩。”
+

@@ -1,0 +1,132 @@
+<view class="wrap">
+
+  <!-- ============ 头部：资料头（字段来自 user 表） ============ -->
+  <view class="hd" style="padding-top:{{statusBarHeight}}px">
+    <view class="hd-bg a"></view>
+    <view class="hd-bg b"></view>
+
+    <view class="profile">
+      <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+        <image wx:if="{{form.avatarUrl}}" class="avatar" src="{{form.avatarUrl}}" mode="aspectFill" />
+        <view wx:else class="avatar avatar-ph"></view>
+      </button>
+      <view class="pinfo">
+        <view class="pname">{{displayName}}</view>
+        <view class="psub" wx:if="{{info.rfidUid}}">校园卡 {{info.rfidUid}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="body">
+
+    <!-- ============ 账号信息（user 表） ============ -->
+    <view class="card">
+      <view class="sec-head">
+        <view class="sec-title">账号信息</view>
+        <view class="f22 t3">user 表</view>
+      </view>
+
+      <view class="row">
+        <text class="label">昵称</text>
+        <input
+          class="input"
+          type="nickname"
+          placeholder="未设置"
+          placeholder-class="ph"
+          value="{{form.nickname}}"
+          bindinput="onNickInput"
+          bindblur="onNickInput"
+        />
+      </view>
+
+      <view class="info-row">
+        <text class="info-k">用户标识</text>
+        <text class="info-v ellipsis">{{info.openid}}</text>
+      </view>
+      <view class="info-row">
+        <text class="info-k">注册时间</text>
+        <text class="info-v">{{info.createdAt}}</text>
+      </view>
+      <view class="info-row" wx:if="{{info.updatedAt}}">
+        <text class="info-k">更新时间</text>
+        <text class="info-v">{{info.updatedAt}}</text>
+      </view>
+
+      <view class="btn btn-primary btn-block mt24" bindtap="onSave">{{saving ? '保存中…' : '保存'}}</view>
+      <view class="f22 t4 mt8">昵称与头像保存到 user 表，其余字段由后端维护。</view>
+    </view>
+
+    <!-- ============ 校园卡绑定（rfid_user 表） ============ -->
+    <view class="card">
+      <view class="sec-head">
+        <view class="sec-title">校园卡绑定</view>
+        <view class="f22 t3">rfid_user 表</view>
+      </view>
+      <view class="info-row">
+        <text class="info-k">校园卡号</text>
+        <text class="info-v mono">{{info.rfidUid || '暂无'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="info-k">绑定时间</text>
+        <text class="info-v">{{info.rfidBindTime || '暂无'}}</text>
+      </view>
+      <view class="tip">校园卡号为座位上RFID读卡器读到的卡号是刷卡签到的唯一凭证。绑定与解绑由图书馆管理员完成。</view>
+    </view>
+
+    <!-- ============ 我的预约 ============ -->
+    <view class="card">
+      <view class="sec-head">
+        <view class="sec-title">我的预约</view>
+        <view class="sec-more" bindtap="goMyReserve" data-status="ALL">查看全部 <view class="arrow ml8"></view></view>
+      </view>
+
+      <view class="status-grid">
+        <view class="sg-item" bindtap="goMyReserve" data-status="RESERVED">
+          <view class="sg-ico" style="background:#FEF3E0">
+            <image src="/images/tab_calendar_on.png" mode="aspectFit" />
+            <view class="sg-badge" wx:if="{{counts.reserved}}">{{counts.reserved}}</view>
+          </view>
+          <view class="sg-label">待签到</view>
+        </view>
+        <view class="sg-item" bindtap="goMyReserve" data-status="USING">
+          <view class="sg-ico" style="background:#FDEAE8">
+            <image src="/images/tab_seat_on.png" mode="aspectFit" />
+            <view class="sg-badge" wx:if="{{counts.using}}">{{counts.using}}</view>
+          </view>
+          <view class="sg-label">使用中</view>
+        </view>
+        <view class="sg-item" bindtap="goMyReserve" data-status="AWAY">
+          <view class="sg-ico" style="background:#EFF2F7">
+            <image src="/images/tab_clock_on.png" mode="aspectFit" />
+            <view class="sg-badge" wx:if="{{counts.away}}">{{counts.away}}</view>
+          </view>
+          <view class="sg-label">暂离</view>
+        </view>
+        <view class="sg-item" bindtap="goMyReserve" data-status="FINISHED">
+          <view class="sg-ico" style="background:#EFEDFF">
+            <image src="/images/tab_doc_on.png" mode="aspectFit" />
+            <view class="sg-badge" wx:if="{{counts.finished}}">{{counts.finished}}</view>
+          </view>
+          <view class="sg-label">已结束</view>
+        </view>
+      </view>
+
+      <!-- 最近一条进行中的预约（动态） -->
+      <view class="latest" wx:if="{{latest}}" bindtap="goDetail">
+        <view class="latest-left">
+          <view class="tag {{latest.statusTag}}">{{latest.statusText}} · {{latest.date}}</view>
+          <view class="latest-title">{{latest.area}}（{{latest.floorText}}）{{latest.seatNo}}号</view>
+          <view class="latest-time">预约时间 {{latest.reserveTime}}</view>
+        </view>
+        <view class="latest-btn" catchtap="goSignin">{{latest.actionText}}</view>
+      </view>
+      <view class="latest empty-latest" wx:else bindtap="goMyReserve" data-status="ALL">
+        <text>暂无进行中的预约，点击查看全部记录</text>
+        <view class="arrow"></view>
+      </view>
+    </view>
+
+    <view class="logout" bindtap="onLogout">退出登录</view>
+    <view class="brand-foot">{{version}}</view>
+  </view>
+</view>

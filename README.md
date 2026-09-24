@@ -195,4 +195,4 @@ npm run dev          # 自动开浏览器 http://localhost:3000，/api 与 /ws �
 
 ## 九、License
 
-[MIT](./LICENSE) © 代茂源 — 物联网工程技术专业
+[MIT](./LICENSE) © BeiKu — 物联网工程技术专业

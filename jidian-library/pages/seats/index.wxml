@@ -1,0 +1,159 @@
+<view class="wrap">
+
+  <!-- ============ 导航 ============ -->
+  <view class="nav-bar" style="padding-top:{{statusBarHeight}}px">
+    <view class="nav">
+      <view class="nav-back" bindtap="back"><view class="nav-back-arrow"></view></view>
+      <view class="nav-title">座位</view>
+      <view class="nav-right" bindtap="manualRefresh">刷新</view>
+    </view>
+  </view>
+
+  <view class="body">
+
+    <!-- ============ 无数据时的空态（未配置后端 / 请求失败） ============ -->
+    <view class="card empty-card" wx:if="{{error}}">
+      <view class="empty-ico">!</view>
+      <view class="empty-title">无法获取座位数据</view>
+      <view class="empty-desc">{{error}}</view>
+      <view class="btn btn-ghost btn-sm mt24" bindtap="manualRefresh">重试</view>
+    </view>
+
+    <block wx:else>
+      <!-- ============ 阅览室切换（由座位表的 area / floor 归并） ============ -->
+      <scroll-view class="room-tabs" scroll-x enable-flex show-scrollbar="{{false}}" wx:if="{{rooms.length > 1}}">
+        <view
+          class="room-tab {{roomKey === item.key ? 'on' : ''}}"
+          wx:for="{{rooms}}"
+          wx:key="key"
+          bindtap="switchRoom"
+          data-key="{{item.key}}"
+        >
+          <text>{{item.name}}</text>
+          <text class="room-tab-floor">{{item.floor}}</text>
+        </view>
+      </scroll-view>
+
+      <!-- ============ 图例 + 统计 ============ -->
+      <view class="card">
+        <view class="legend">
+          <view class="lg-item" wx:for="{{legend}}" wx:key="code">
+            <view class="lg-dot lg-{{item.key}}"></view>
+            <text class="lg-txt">{{item.label}}</text>
+          </view>
+        </view>
+
+        <view class="stats">
+          <view class="st-item">
+            <view class="st-num">{{stats.free}}</view>
+            <view class="st-label">空闲</view>
+          </view>
+          <view class="st-item">
+            <view class="st-num">{{stats.reserved}}</view>
+            <view class="st-label">已预约</view>
+          </view>
+          <view class="st-item">
+            <view class="st-num">{{stats.using}}</view>
+            <view class="st-label">使用中</view>
+          </view>
+          <view class="st-item">
+            <view class="st-num">{{stats.away}}</view>
+            <view class="st-label">暂离</view>
+          </view>
+          <view class="st-item">
+            <view class="st-num">{{stats.alarm}}</view>
+            <view class="st-label">异常</view>
+          </view>
+        </view>
+        <view class="stats-sub" wx:if="{{stats.offline}}">另有 {{stats.offline}} 个座位设备离线（离线是独立状态，不覆盖座位业务状态）。</view>
+      </view>
+
+      <!-- ============ 座位图 ============ -->
+      <view class="card">
+        <view class="sec-head">
+          <view class="sec-title">{{room.name}}座位图</view>
+          <view class="f22 t3">{{room.floor}} · 共 {{stats.total}} 座</view>
+        </view>
+
+        <view class="map-frame">
+          <view class="map-window">窗</view>
+          <view class="seat-map" wx:if="{{!loading}}">
+            <view class="map-row" wx:for="{{rows}}" wx:key="row" wx:for-item="r">
+              <block wx:for="{{r.cells}}" wx:key="key" wx:for-item="c">
+                <view
+                  wx:if="{{c.cellType === 'seat'}}"
+                  class="cell seat s-{{c.statusKey}} {{selectedSeat.seatCode === c.seatCode ? 'picked' : ''}}"
+                  style="width:{{cellW}}rpx;height:{{cellW}}rpx"
+                  bindtap="onSeatTap"
+                  data-seat="{{c}}"
+                >
+                  <text class="cell-txt">{{c.short}}</text>
+                  <view class="cell-off" wx:if="{{c.online === false}}">离线</view>
+                </view>
+                <view wx:else class="cell blank" style="width:{{cellW}}rpx;height:{{cellW}}rpx"></view>
+              </block>
+            </view>
+          </view>
+          <view class="loading-box" wx:else>正在加载座位状态…</view>
+        </view>
+
+        <view class="map-tip">
+          <text class="tip-ico">i</text>
+          <text>座位状态来自后端 seat 表；设备在线状态与假占座告警由设备经 OneNET 上报后端后写入 seat_shadow，前端不根据压力值自行判断有人无人。</text>
+        </view>
+      </view>
+
+      <view class="holder"></view>
+    </block>
+  </view>
+
+  <!-- ============ 底部操作 ============ -->
+  <view class="footer-bar">
+    <view class="foot-inner">
+      <view class="foot-info">
+        <block wx:if="{{error}}">
+          <view class="f24 t3">尚未接入后端</view>
+          <view class="f32 bold t4">暂不可预约</view>
+        </block>
+        <block wx:elif="{{selectedSeat}}">
+          <view class="f24 t3">{{room.name}} · {{room.floor}}</view>
+          <view class="f32 bold">{{selectedSeat.seatNo}} 号 <text class="f22 t3">（{{selectedSeat.seatCode}}）</text></view>
+        </block>
+        <block wx:else>
+          <view class="f24 t3">{{room.name}} · {{room.floor}}</view>
+          <view class="f32 bold t4">请在图中选择一个空闲座位</view>
+        </block>
+      </view>
+      <view
+        class="btn btn-primary foot-btn {{selectedSeat && !error ? '' : 'btn-disabled'}}"
+        bindtap="openConfirm"
+      >确认选座</view>
+    </view>
+  </view>
+
+  <!-- ============ 确认预约弹窗 ============ -->
+  <view class="mask" wx:if="{{showConfirm}}" catchtap="closeConfirm">
+    <view class="modal" catchtap="noop">
+      <view class="modal-body">
+        <view class="cf-title">确定要预约 {{selectedSeat.seatNo}} 号座位吗？</view>
+        <view class="cf-art">
+          <view class="cf-seat">
+            <view class="cf-seat-back"></view>
+            <view class="cf-seat-pad"></view>
+          </view>
+        </view>
+        <view class="cf-rows">
+          <view class="cf-row"><text class="cf-k">阅览室</text><text class="cf-v">{{room.name}}（{{room.floor}}）</text></view>
+          <view class="cf-row"><text class="cf-k">座位编号</text><text class="cf-v">{{selectedSeat.seatCode}}</text></view>
+          <view class="cf-row"><text class="cf-k">座位号</text><text class="cf-v">{{selectedSeat.seatNo}}</text></view>
+          <view class="cf-row"><text class="cf-k">当前状态</text><text class="cf-v">空闲</text></view>
+        </view>
+        <view class="cf-note">预约成功后请在 {{reserveExpireMin}} 分钟内到座位刷卡签到，超时座位将自动释放。</view>
+      </view>
+      <view class="modal-foot">
+        <view class="mf-btn" bindtap="closeConfirm">取消</view>
+        <view class="mf-btn primary" bindtap="doReserve">{{confirming ? '处理中…' : '确认预约'}}</view>
+      </view>
+    </view>
+  </view>
+</view>

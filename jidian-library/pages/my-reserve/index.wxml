@@ -1,0 +1,118 @@
+<view class="page-wrap">
+
+  <!-- 头部 -->
+  <view class="hd" style="padding-top:{{statusBarHeight}}px">
+    <view class="hd-row">
+      <view class="hd-title">我的预约</view>
+      <view class="hd-add" bindtap="goReserve">＋ 新增</view>
+    </view>
+  </view>
+
+  <!-- 状态筛选（规范 5.2 的预约状态） -->
+  <scroll-view class="tabs" scroll-x enable-flex show-scrollbar="{{false}}">
+    <view
+      class="tab {{active === item.key ? 'on' : ''}}"
+      wx:for="{{tabs}}"
+      wx:key="key"
+      bindtap="onTab"
+      data-key="{{item.key}}"
+    >
+      <text>{{item.label}}</text>
+      <text class="tab-num" wx:if="{{counts[item.key]}}">{{counts[item.key]}}</text>
+    </view>
+  </scroll-view>
+
+  <view class="list">
+    <view class="loading-box" wx:if="{{loading}}">正在加载预约记录…</view>
+
+    <!-- 后端不可用 -->
+    <view class="card err-card" wx:elif="{{error}}">
+      <view class="err-ico">!</view>
+      <view class="flex-1 ml16">
+        <view class="f28 bold">暂时拿不到预约记录</view>
+        <view class="f23 t3 mt8">{{error}}</view>
+      </view>
+    </view>
+
+    <block wx:elif="{{groups.length}}">
+      <view class="group" wx:for="{{groups}}" wx:key="date" wx:for-item="g">
+        <view class="group-date">
+          <text class="gd-main">{{g.label}}</text>
+          <text class="gd-sub" wx:if="{{g.label === '今天' || g.label === '昨天'}}">{{g.date}}</text>
+        </view>
+
+        <view class="res-card" wx:for="{{g.list}}" wx:key="id" wx:for-item="r" bindtap="viewDetail" data-id="{{r.id}}">
+          <view class="rc-top between">
+            <view class="items-center of-hidden">
+              <view class="rc-ico"><view class="rc-ico-in"></view></view>
+              <text class="f29 bold ellipsis">{{r.area}}/{{r.seatNo}}</text>
+            </view>
+            <view class="{{r.statusTag}}">{{r.statusText}}</view>
+          </view>
+
+          <view class="rc-time">
+            <view class="rc-t">
+              <view class="rc-t-label">预约</view>
+              <view class="rc-t-value mono">{{r.reserveClock}}</view>
+            </view>
+            <view class="rc-t">
+              <view class="rc-t-label">签到</view>
+              <view class="rc-t-value mono">{{r.signClock}}</view>
+            </view>
+            <view class="rc-t">
+              <view class="rc-t-label">离座</view>
+              <view class="rc-t-value mono">{{r.releaseClock}}</view>
+            </view>
+          </view>
+
+          <view class="rc-meta between">
+            <view class="rc-meta-item">
+              <view class="rc-meta-label">楼层</view>
+              <view class="rc-meta-value">{{r.floorText || '—'}}</view>
+            </view>
+            <view class="rc-meta-item">
+              <view class="rc-meta-label">座位编号</view>
+              <view class="rc-meta-value">{{r.seatCode}}</view>
+            </view>
+            <view class="rc-meta-item">
+              <view class="rc-meta-label">座位号</view>
+              <view class="rc-meta-value">{{r.seatNo}}</view>
+            </view>
+          </view>
+
+          <view class="rc-actions" wx:if="{{r.canSignin || r.canCancel}}">
+            <view
+              class="rc-btn ghost"
+              wx:if="{{r.canCancel}}"
+              catchtap="onCancel"
+              data-id="{{r.id}}"
+            >取消预约</view>
+            <view
+              class="rc-btn ghost"
+              wx:if="{{r.status === 'RESERVED' || r.status === 'USING'}}"
+              catchtap="onReport"
+              data-item="{{r}}"
+            >占座反馈</view>
+            <view
+              class="rc-btn primary"
+              wx:if="{{r.canSignin}}"
+              catchtap="goSignin"
+              data-id="{{r.id}}"
+            >{{r.actionText}}</view>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <empty
+      wx:else
+      icon="📅"
+      text="还没有预约记录"
+      sub="点击下方按钮，去座位图预约一个座位吧"
+      btnText="去预约座位"
+      bind:action="goReserve"
+    />
+  </view>
+
+  <view class="foot-tip" wx:if="{{groups.length}}">预约后 {{15}} 分钟内未签到将自动释放座位，并记一次预约超时。</view>
+</view>

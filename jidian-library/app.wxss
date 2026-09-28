@@ -1,0 +1,265 @@
+/* ============================================================
+ * app.wxss —— 全局样式与设计令牌
+ * 设计语言：浅蓝白 · 卡片化 · 大圆角，配色取自原型图
+ * ============================================================ */
+
+page {
+  /* 主色 */
+  --primary: #3A6BF0;
+  --primary-2: #5B8CFF;
+  --primary-deep: #2B54C8;
+  --primary-soft: #EBF1FE;
+  --primary-soft-2: #DDE8FD;
+
+  /* 功能色 */
+  --success: #22C08A;
+  --success-soft: #E4F8F1;
+  --warning: #FF9F2E;
+  --warning-soft: #FFF3E3;
+  --danger: #F2564B;
+  --danger-soft: #FEECEA;
+  --purple: #7A6BFF;
+  --purple-soft: #EFEDFF;
+
+  /* 中性色 */
+  --text-1: #1B2333;
+  --text-2: #5B6478;
+  --text-3: #8A94A6;
+  --text-4: #AAB2C0;
+  --line: #EEF1F6;
+  --bg: #F4F7FC;
+  --card: #FFFFFF;
+
+  /* 圆角 / 阴影 */
+  --r-s: 12rpx;
+  --r-m: 20rpx;
+  --r-l: 28rpx;
+  --r-xl: 36rpx;
+  --shadow: 0 8rpx 28rpx rgba(58, 107, 240, 0.07);
+  --shadow-up: 0 -6rpx 24rpx rgba(58, 107, 240, 0.08);
+
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', Helvetica, sans-serif;
+  font-size: 28rpx;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+view, text, scroll-view, button, input, textarea, image, navigator {
+  box-sizing: border-box;
+}
+
+/* ---------- 布局 ---------- */
+.page {
+  min-height: 100vh;
+  padding: 24rpx 28rpx calc(40rpx + env(safe-area-inset-bottom));
+}
+.page-flat { padding: 0; }
+.flex { display: flex; }
+.flex-col { display: flex; flex-direction: column; }
+.center { display: flex; align-items: center; justify-content: center; }
+.items-center { display: flex; align-items: center; }
+.between { display: flex; align-items: center; justify-content: space-between; }
+.wrap { flex-wrap: wrap; }
+.flex-1 { flex: 1; min-width: 0; }
+.of-hidden { overflow: hidden; }
+.ellipsis { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ellipsis-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* ---------- 间距 ---------- */
+.mt8 { margin-top: 8rpx; }   .mt12 { margin-top: 12rpx; }
+.mt16 { margin-top: 16rpx; } .mt20 { margin-top: 20rpx; }
+.mt24 { margin-top: 24rpx; } .mt32 { margin-top: 32rpx; }
+.mt40 { margin-top: 40rpx; }
+.mb8 { margin-bottom: 8rpx; }  .mb12 { margin-bottom: 12rpx; }
+.mb16 { margin-bottom: 16rpx; } .mb20 { margin-bottom: 20rpx; }
+.mb24 { margin-bottom: 24rpx; } .mb32 { margin-bottom: 32rpx; }
+.ml8 { margin-left: 8rpx; } .ml12 { margin-left: 12rpx; } .ml16 { margin-left: 16rpx; }
+.mr8 { margin-right: 8rpx; } .mr12 { margin-right: 12rpx; } .mr16 { margin-right: 16rpx; }
+
+/* ---------- 文字 ---------- */
+.t1 { color: var(--text-1); }
+.t2 { color: var(--text-2); }
+.t3 { color: var(--text-3); }
+.t4 { color: var(--text-4); }
+.tp { color: var(--primary); }
+.tsuc { color: var(--success); }
+.twarn { color: var(--warning); }
+.tdanger { color: var(--danger); }
+.f20 { font-size: 20rpx; } .f22 { font-size: 22rpx; } .f24 { font-size: 24rpx; }
+.f26 { font-size: 26rpx; } .f28 { font-size: 28rpx; } .f30 { font-size: 30rpx; }
+.f32 { font-size: 32rpx; } .f36 { font-size: 36rpx; } .f40 { font-size: 40rpx; }
+.f48 { font-size: 48rpx; } .f56 { font-size: 56rpx; } .f64 { font-size: 64rpx; }
+.bold { font-weight: 600; } .bolder { font-weight: 700; }
+.mono { font-family: 'DIN Alternate', 'SF Mono', Menlo, Consolas, monospace; }
+
+/* ---------- 卡片 ---------- */
+.card {
+  background: var(--card);
+  border-radius: var(--r-l);
+  padding: 28rpx;
+  box-shadow: var(--shadow);
+}
+.card-tight { padding: 20rpx; }
+.card-flat { box-shadow: none; border: 2rpx solid var(--line); }
+.card + .card { margin-top: 24rpx; }
+
+/* 分组标题 */
+.sec-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8rpx 4rpx 20rpx;
+}
+.sec-title { font-size: 32rpx; font-weight: 700; color: var(--text-1); }
+.sec-more { font-size: 24rpx; color: var(--text-3); display: flex; align-items: center; }
+
+/* ---------- 按钮 ---------- */
+.btn {
+  height: 88rpx;
+  border-radius: 44rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  border: none;
+  padding: 0 40rpx;
+  line-height: 1;
+}
+.btn::after { border: none; }
+.btn-primary {
+  background: linear-gradient(135deg, #5B8CFF 0%, #3A6BF0 100%);
+  color: #fff;
+  box-shadow: 0 10rpx 24rpx rgba(58, 107, 240, 0.28);
+}
+.btn-primary.btn-disabled,
+.btn-primary[disabled] {
+  background: #C6D3EE;
+  color: #fff;
+  box-shadow: none;
+}
+.btn-ghost {
+  background: #fff;
+  color: var(--primary);
+  border: 2rpx solid var(--primary-soft-2);
+}
+.btn-soft { background: var(--primary-soft); color: var(--primary); }
+.btn-plain { background: #F2F5FA; color: var(--text-2); }
+.btn-sm { height: 62rpx; border-radius: 31rpx; font-size: 24rpx; padding: 0 28rpx; }
+.btn-xs { height: 52rpx; border-radius: 26rpx; font-size: 22rpx; padding: 0 22rpx; }
+.btn-block { width: 100%; }
+
+/* ---------- 标签 / 徽标 ---------- */
+.tag {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 40rpx; padding: 0 16rpx;
+  border-radius: 10rpx;
+  font-size: 22rpx;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.tag-success { background: var(--success-soft); color: var(--success); }
+.tag-warning { background: var(--warning-soft); color: var(--warning); }
+.tag-danger { background: var(--danger-soft); color: var(--danger); }
+.tag-grey { background: #F2F5FA; color: var(--text-3); }
+.tag-purple { background: var(--purple-soft); color: var(--purple); }
+
+.badge-dot {
+  min-width: 32rpx; height: 32rpx; padding: 0 8rpx;
+  border-radius: 16rpx; background: var(--danger); color: #fff;
+  font-size: 20rpx; display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* ---------- 分割线 ---------- */
+.divider { height: 2rpx; background: var(--line); margin: 20rpx 0; }
+.gap-line { height: 2rpx; background: var(--line); }
+
+/* ---------- 右箭头 ---------- */
+.arrow {
+  width: 16rpx; height: 16rpx;
+  border-top: 3rpx solid var(--text-4);
+  border-right: 3rpx solid var(--text-4);
+  transform: rotate(45deg);
+  flex-shrink: 0;
+}
+
+/* ---------- 列表项 ---------- */
+.list-item {
+  display: flex; align-items: center;
+  height: 108rpx;
+  font-size: 28rpx;
+  color: var(--text-1);
+}
+.list-item:active { background: #FAFBFE; }
+.list-icon {
+  width: 64rpx; height: 64rpx; border-radius: 18rpx;
+  display: flex; align-items: center; justify-content: center;
+  margin-right: 22rpx; flex-shrink: 0;
+}
+
+/* ---------- 底部固定操作栏 ---------- */
+.footer-bar {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  background: #fff;
+  padding: 20rpx 28rpx calc(20rpx + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow-up);
+  z-index: 90;
+}
+.footer-holder { height: 180rpx; }
+
+/* ---------- 空状态 ---------- */
+.empty {
+  padding: 120rpx 0; text-align: center; color: var(--text-3);
+}
+.empty-icon {
+  width: 160rpx; height: 160rpx; margin: 0 auto 24rpx;
+  border-radius: 50%; background: var(--primary-soft);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 64rpx; color: var(--primary-2);
+}
+
+/* ---------- 弹层 ---------- */
+.mask {
+  position: fixed; inset: 0;
+  background: rgba(17, 24, 39, 0.45);
+  z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 60rpx;
+}
+.modal {
+  width: 100%;
+  background: #fff;
+  border-radius: var(--r-l);
+  overflow: hidden;
+  animation: pop .18s ease-out;
+}
+@keyframes pop {
+  from { transform: scale(.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.modal-body { padding: 40rpx 32rpx 16rpx; }
+.modal-foot { display: flex; border-top: 2rpx solid var(--line); }
+.modal-foot .mf-btn {
+  flex: 1; height: 96rpx; display: flex; align-items: center; justify-content: center;
+  font-size: 30rpx; color: var(--text-2);
+}
+.modal-foot .mf-btn.primary { color: var(--primary); font-weight: 700; }
+.modal-foot .mf-btn + .mf-btn { border-left: 2rpx solid var(--line); }
+
+/* ---------- 骨架 / 加载 ---------- */
+.loading-box { padding: 60rpx 0; text-align: center; color: var(--text-3); font-size: 26rpx; }
+
+/* ---------- 通用 icon（纯 CSS 绘制的圆形图标底） ---------- */
+.ico {
+  width: 64rpx; height: 64rpx; border-radius: 20rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30rpx; flex-shrink: 0;
+}
+.ico-blue { background: var(--primary-soft); color: var(--primary); }
+.ico-green { background: var(--success-soft); color: var(--success); }
+.ico-orange { background: var(--warning-soft); color: var(--warning); }
+.ico-red { background: var(--danger-soft); color: var(--danger); }
+.ico-purple { background: var(--purple-soft); color: var(--purple); }

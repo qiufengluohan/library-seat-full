@@ -1,0 +1,110 @@
+<view class="wrap">
+
+  <view class="nav-bar" style="padding-top:{{statusBarHeight}}px">
+    <view class="nav">
+      <view class="nav-back" bindtap="back"><view class="nav-back-arrow"></view></view>
+      <view class="nav-title">{{fromDetail ? '预约详情' : '预约成功'}}</view>
+    </view>
+  </view>
+
+  <!-- ============ 后端不可用 ============ -->
+  <view class="body" wx:if="{{error}}">
+    <view class="card empty-card">
+      <view class="empty-ico">!</view>
+      <view class="empty-title">无法获取预约信息</view>
+      <view class="empty-desc">{{error}}</view>
+      <view class="btn btn-ghost btn-sm mt24" bindtap="goMyReserve">返回我的预约</view>
+    </view>
+  </view>
+
+  <view class="body" wx:elif="{{r}}">
+
+    <!-- ============ 结果卡 ============ -->
+    <view class="result-card">
+      <view class="result-art">
+        <view class="ra-seat">
+          <view class="ra-back"></view>
+          <view class="ra-pad"></view>
+        </view>
+        <view class="ra-check" wx:if="{{r.status === 'RESERVED' || r.status === 'USING' || r.status === 'AWAY'}}">✓</view>
+      </view>
+      <view class="result-title">{{r.area}} {{r.seatNo}} 号</view>
+      <view class="result-status">
+        <view class="{{statusTag}}">{{statusText}}</view>
+      </view>
+      <view class="result-count" wx:if="{{remainText}}">
+        <view class="rc-dot" style="background:{{color}}"></view>
+        <text>{{remainText}}</text>
+      </view>
+    </view>
+
+    <!-- ============ 预约信息（ReservationVO） ============ -->
+    <view class="card">
+      <view class="sec-head">
+        <view class="sec-title">预约信息</view>
+        <view class="f22 t3">No.{{r.id}}</view>
+      </view>
+      <view class="info-row">
+        <text class="info-k">阅览室</text>
+        <text class="info-v">{{r.area}}{{r.floorText ? ' · ' + r.floorText : ''}}</text>
+      </view>
+      <view class="info-row">
+        <text class="info-k">座位编号</text>
+        <text class="info-v mono">{{r.seatCode}}</text>
+      </view>
+      <view class="info-row">
+        <text class="info-k">座位号</text>
+        <text class="info-v">{{r.seatNo}} 号</text>
+      </view>
+      <view class="info-row">
+        <text class="info-k">预约时间</text>
+        <text class="info-v">{{r.reserveTime}}<text class="info-sub" wx:if="{{weekday}}">（{{weekday}}）</text></text>
+      </view>
+      <view class="info-row" wx:if="{{r.signTime}}">
+        <text class="info-k">签到时间</text>
+        <text class="info-v">{{r.signTime}}</text>
+      </view>
+      <view class="info-row" wx:if="{{r.leaveTime}}">
+        <text class="info-k">暂离时间</text>
+        <text class="info-v">{{r.leaveTime}}</text>
+      </view>
+      <view class="info-row" wx:if="{{r.returnTime}}">
+        <text class="info-k">回座时间</text>
+        <text class="info-v">{{r.returnTime}}</text>
+      </view>
+      <view class="info-row" wx:if="{{r.releaseTime}}">
+        <text class="info-k">离座时间</text>
+        <text class="info-v">{{r.releaseTime}}</text>
+      </view>
+      <view class="info-row" wx:if="{{durationText}}">
+        <text class="info-k">学习时长</text>
+        <text class="info-v">{{durationText}}</text>
+      </view>
+    </view>
+
+    <!-- ============ 状态提示 ============ -->
+    <view class="tip-card" wx:if="{{r.status === 'RESERVED'}}">
+      <view class="tip-ico-big">!</view>
+      <text class="tip-text">请在 {{reserveExpireMin}} 分钟内到座位上刷校园卡完成签到。签到由座位读卡器自动上报，超时未签到座位将自动释放。</text>
+    </view>
+    <view class="tip-card" wx:elif="{{r.status === 'AWAY'}}">
+      <view class="tip-ico-big">!</view>
+      <text class="tip-text">座位已为你保留，请及时回座；暂离超时将自动释放座位。</text>
+    </view>
+
+    <!-- ============ 操作 ============ -->
+    <view class="actions">
+      <view class="btn btn-ghost flex-1" bindtap="goHome">返回首页</view>
+      <view
+        class="btn btn-primary flex-1 ml16"
+        wx:if="{{r.status === 'RESERVED' || r.status === 'USING' || r.status === 'AWAY'}}"
+        bindtap="goSignin"
+      >去签到 / 离座</view>
+      <view class="btn btn-primary flex-1 ml16" wx:else bindtap="goMyReserve">我的预约</view>
+    </view>
+
+    <view class="cancel-link" wx:if="{{fromDetail && r.status === 'RESERVED'}}" bindtap="onCancel">取消本次预约</view>
+  </view>
+
+  <view class="loading-box" wx:else>正在加载预约信息…</view>
+</view>

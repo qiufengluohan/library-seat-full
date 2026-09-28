@@ -1,0 +1,16 @@
+.empty { padding: 100rpx 0 80rpx; text-align: center; }
+.empty-icon {
+  width: 156rpx; height: 156rpx; margin: 0 auto 26rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #EEF3FE 0%, #DDE8FD 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 60rpx; color: #7E9DF5;
+}
+.empty-text { font-size: 28rpx; color: #8A94A6; }
+.empty-sub { font-size: 24rpx; color: #AAB2C0; margin-top: 10rpx; }
+.empty-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-top: 32rpx; height: 72rpx; padding: 0 44rpx;
+  border-radius: 36rpx; font-size: 26rpx; font-weight: 600;
+  color: #3A6BF0; background: #EBF1FE;
+}

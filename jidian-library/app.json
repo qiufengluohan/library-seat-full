@@ -1,0 +1,49 @@
+{
+  "pages": [
+    "pages/login/index",
+    "pages/index/index",
+    "pages/my-reserve/index",
+    "pages/mine/index",
+    "pages/seats/index",
+    "pages/reserve-success/index",
+    "pages/signin/index",
+    "pages/feedback/index"
+  ],
+  "window": {
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "navigationBarTitleText": "机电图书馆",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F4F7FC",
+    "enablePullDownRefresh": false
+  },
+  "tabBar": {
+    "color": "#9AA4B8",
+    "selectedColor": "#3A6BF0",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "images/tab_home.png",
+        "selectedIconPath": "images/tab_home_on.png"
+      },
+      {
+        "pagePath": "pages/my-reserve/index",
+        "text": "我的预约",
+        "iconPath": "images/tab_calendar.png",
+        "selectedIconPath": "images/tab_calendar_on.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "images/tab_user.png",
+        "selectedIconPath": "images/tab_user_on.png"
+      }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}

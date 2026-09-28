@@ -1,0 +1,74 @@
+<view class="wrap">
+
+  <view class="nav-bar" style="padding-top:{{statusBarHeight}}px">
+    <view class="nav">
+      <view class="nav-back" bindtap="back"><view class="nav-back-arrow"></view></view>
+      <view class="nav-title">意见反馈</view>
+    </view>
+  </view>
+
+  <view class="body">
+
+    <view class="card" wx:if="{{seatInfo}}">
+      <view class="sec-head"><view class="sec-title">关联预约</view></view>
+      <view class="seat-info">{{seatInfo}}</view>
+    </view>
+
+    <view class="card">
+      <view class="sec-head"><view class="sec-title">问题类型</view></view>
+      <view class="chips">
+        <view
+          class="chip {{type === item.key ? 'on' : ''}}"
+          wx:for="{{types}}"
+          wx:key="key"
+          bindtap="onPickType"
+          data-key="{{item.key}}"
+        >{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="sec-head"><view class="sec-title">详细描述</view></view>
+      <textarea
+        class="ta"
+        placeholder="请描述你遇到的问题或建议，我们会在 1 个工作日内处理"
+        placeholder-class="ph"
+        maxlength="500"
+        value="{{content}}"
+        bindinput="onContent"
+      ></textarea>
+      <view class="ta-count">{{content.length}}/500</view>
+
+      <view class="upload">
+        <view class="up-item" wx:for="{{images}}" wx:key="*this">
+          <image class="up-img" src="{{item}}" mode="aspectFill" bindtap="previewImage" data-index="{{index}}" />
+          <view class="up-del" catchtap="removeImage" data-index="{{index}}">×</view>
+        </view>
+        <view class="up-add" wx:if="{{images.length < 3}}" bindtap="chooseImage">
+          <view class="up-add-ico">＋</view>
+          <view class="up-add-txt">上传图片</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="sec-head"><view class="sec-title">联系方式（选填）</view></view>
+      <input class="input" placeholder="手机号 / 微信 / 邮箱，便于我们回访" placeholder-class="ph"
+        value="{{contact}}" bindinput="onContact" />
+    </view>
+
+    <view class="card tel-card" bindtap="callService">
+      <view class="tel-ico">
+        <image src="/images/tab_phone_on.png" mode="aspectFit" />
+      </view>
+      <view class="flex-1">
+        <view class="f28 bold">电话反馈</view>
+        <view class="f23 t3 mt8">图书馆服务台 {{tel}}（08:00-22:00）</view>
+      </view>
+      <view class="arrow"></view>
+    </view>
+
+    <view class="btn btn-primary btn-block mt32" bindtap="onSubmit">{{submitting ? '提交中…' : '提交反馈'}}</view>
+    <view class="foot-tip">本页为静态表单，提交后仅做本地校验与提示；占座与超时等异常记录由设备与云端自动生成，可在 Web 管理端的违规管理中查看。</view>
+  </view>
+</view>

@@ -1,0 +1,183 @@
+<view class="home">
+
+  <!-- ============ 头部（自定义导航） ============ -->
+  <view class="hd" style="padding-top:{{statusBarHeight}}px">
+    <view class="hd-mask"></view>
+    <view class="hd-row">
+      <view class="hd-logo">
+        <view class="hd-logo-d"></view>
+      </view>
+      <view class="hd-name">机电图书馆</view>
+      <view class="hd-bell" bindtap="goMyReserve">
+        <image class="hd-bell-img" src="/images/tab_calendar_on.png" mode="aspectFit" />
+        <view class="hd-bell-dot" wx:if="{{current}}"></view>
+      </view>
+    </view>
+    <view class="hd-search" bindtap="openSearch">
+      <view class="hd-search-ico"></view>
+      <view class="hd-search-ph">搜索阅览室</view>
+    </view>
+  </view>
+
+  <view class="body">
+
+    <!-- ============ 数据来源异常提示 ============ -->
+    <view class="card err-card" wx:if="{{error}}">
+      <view class="err-ico">!</view>
+      <view class="flex-1 ml16">
+        <view class="f28 bold">暂时拿不到座位数据</view>
+        <view class="f23 t3 mt8">{{error}}</view>
+      </view>
+    </view>
+
+    <!-- ============ 主入口：预约座位 → 座位页 ============ -->
+    <view class="hero" bindtap="goReserve">
+      <view class="hero-bg a"></view>
+      <view class="hero-bg b"></view>
+      <view class="hero-left">
+        <view class="hero-title">预约座位</view>
+        <view class="hero-sub" wx:if="{{seatTotal}}">{{rooms.length}} 个阅览室 · {{seatTotal}} 个座位</view>
+        <view class="hero-sub" wx:else>查看阅览室座位状态</view>
+        <view class="hero-btn">进入座位图 →</view>
+      </view>
+      <view class="hero-art">
+        <view class="seat">
+          <view class="seat-back"></view>
+          <view class="seat-pad"></view>
+          <view class="seat-leg l"></view>
+          <view class="seat-leg r"></view>
+        </view>
+        <view class="hero-art-shadow"></view>
+      </view>
+    </view>
+
+    <!-- ============ 当前预约（动态：没有进行中的预约则不渲染） ============ -->
+    <view class="card today" wx:if="{{current}}">
+      <view class="today-hd between">
+        <view class="items-center" bindtap="goDetail">
+          <view class="today-dot"></view>
+          <text class="f30 bold">{{current.area}}/{{current.seatNo}}</text>
+        </view>
+        <view class="signin-btn" catchtap="goSignin">
+          <text>{{current.actionText}}</text>
+          <view class="signin-btn-arrow"></view>
+        </view>
+      </view>
+
+      <view class="today-status" bindtap="goDetail">
+        <view class="{{current.statusTag}}">{{current.statusLabel}}</view>
+        <text class="f22 t3">{{current.seatCode}}</text>
+      </view>
+
+      <view class="today-meta">
+        <view class="meta-item">
+          <view class="meta-label">预约时间</view>
+          <view class="meta-value mono">{{current.reserveTime}}</view>
+        </view>
+        <view class="meta-item">
+          <view class="meta-label">签到时间</view>
+          <view class="meta-value mono">{{current.signTime || '待签到'}}</view>
+        </view>
+        <view class="meta-item">
+          <view class="meta-label">楼层</view>
+          <view class="meta-value">{{current.floorText || '—'}}</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ============ 快捷功能 ============ -->
+    <view class="quick">
+      <view class="quick-item" bindtap="goMyReserve">
+        <view class="quick-ico" style="background:#EBF1FE">
+          <image src="/images/tab_calendar_on.png" mode="aspectFit" />
+        </view>
+        <view class="quick-txt">我的预约</view>
+      </view>
+      <view class="quick-item" bindtap="goSignin">
+        <view class="quick-ico" style="background:#EFEDFF">
+          <image src="/images/tab_signin_on.png" mode="aspectFit" />
+        </view>
+        <view class="quick-txt">签到 / 离座</view>
+      </view>
+      <view class="quick-item" bindtap="goFeedback">
+        <view class="quick-ico" style="background:#FFF3E3">
+          <image src="/images/tab_chat_on.png" mode="aspectFit" />
+        </view>
+        <view class="quick-txt">意见反馈</view>
+      </view>
+    </view>
+
+    <!-- ============ 阅览室速览（由座位表的 area / floor 归并） ============ -->
+    <block wx:if="{{rooms.length}}">
+      <view class="sec-head mt16">
+        <view class="sec-title">阅览室</view>
+        <view class="sec-more" bindtap="goReserve">全部 <view class="arrow ml8"></view></view>
+      </view>
+      <scroll-view class="room-scroll" scroll-x enable-flex show-scrollbar="{{false}}">
+        <view class="room-card" wx:for="{{rooms}}" wx:key="key" bindtap="goReserve" data-key="{{item.key}}">
+          <view class="room-top between">
+            <text class="f28 bold">{{item.name}}</text>
+            <view class="tag">{{item.floor}}</view>
+          </view>
+          <view class="room-bottom between">
+            <text class="f22 t3">共 {{item.totalSeats}} 个座位</text>
+            <text class="f22 tp bold">查看 ›</text>
+          </view>
+        </view>
+      </scroll-view>
+    </block>
+
+    <!-- ============ 问题反馈 ============ -->
+    <view class="card fb-card mt24" bindtap="goFeedback">
+      <view class="fb-ico">?</view>
+      <view class="flex-1 ml16">
+        <view class="f28 bold">问题反馈</view>
+        <view class="f24 t3 mt8">座位被其他同学占用了怎么办？</view>
+      </view>
+      <view class="fb-go">我要反馈 <view class="arrow ml8"></view></view>
+    </view>
+
+    <view class="brand-foot">机电大学图书馆 · 座位预约与学习管理平台</view>
+  </view>
+
+  <!-- ============ 搜索浮层 ============ -->
+  <view class="search-panel" wx:if="{{searchOpen}}">
+    <view class="sp-mask" catchtap="closeSearch"></view>
+    <view class="sp-inner" style="padding-top:{{statusBarHeight + 10}}px">
+      <view class="sp-bar">
+        <view class="hd-search-ico"></view>
+        <input
+          class="sp-input"
+          placeholder="输入阅览室名称或楼层"
+          placeholder-class="ph"
+          focus="{{searchOpen}}"
+          value="{{keyword}}"
+          bindinput="onSearchInput"
+        />
+        <view class="sp-cancel" catchtap="closeSearch">取消</view>
+      </view>
+      <scroll-view class="sp-list" scroll-y>
+        <block wx:if="{{searchResult.length}}">
+          <view class="sp-item" wx:for="{{searchResult}}" wx:key="key" bindtap="goReserve" data-key="{{item.key}}">
+            <view class="sp-item-ico">
+              <image src="/images/tab_seat_on.png" mode="aspectFit" />
+            </view>
+            <view class="flex-1">
+              <view class="f28 bold">{{item.name}}</view>
+              <view class="f23 t3 mt8">{{item.floor}} · 共 {{item.totalSeats}} 个座位</view>
+            </view>
+            <view class="arrow"></view>
+          </view>
+        </block>
+        <empty wx:elif="{{keyword}}" text="没有找到相关阅览室" sub="试试搜索楼层，例如「3楼」"></empty>
+        <block wx:else>
+          <view class="sp-hot">全部阅览室</view>
+          <view class="sp-chips">
+            <view class="sp-chip" wx:for="{{rooms}}" wx:key="key" bindtap="goReserve" data-key="{{item.key}}">{{item.name}}</view>
+          </view>
+        </block>
+      </scroll-view>
+    </view>
+  </view>
+
+</view>

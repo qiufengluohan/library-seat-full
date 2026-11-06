@@ -1,0 +1,283 @@
+{
+  "version": "1.0",
+  "profile": {
+    "industryId": "1",
+    "sceneId": "17",
+    "categoryId": "395",
+    "productId": "Wh08f3Q71p"
+  },
+  "properties": [
+    {
+      "identifier": "adc_threshold",
+      "name": "压力传感器判定阈值",
+      "functionType": "u",
+      "accessMode": "rw",
+      "desc": "用于远程调整传感器判断“有人坐下”的模拟量阈值",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "max": "4095",
+          "min": "0",
+          "step": "1",
+          "unit": ""
+        }
+      },
+      "functionMode": "property",
+      "required": false
+    },
+    {
+      "identifier": "alarm_flag_1",
+      "name": "异常占座1",
+      "functionType": "u",
+      "accessMode": "r",
+      "desc": "（1 / true 表示产生假占座等异常告警，0 / false 表示正常状态）",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "true": "1",
+          "false": "0"
+        }
+      },
+      "functionMode": "property",
+      "required": false
+    },
+    {
+      "identifier": "alarm_flag_2",
+      "name": "异常占座2",
+      "functionType": "u",
+      "accessMode": "r",
+      "desc": "（1 / true 表示产生假占座等异常告警，0 / false 表示正常状态）",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "true": "1",
+          "false": "0"
+        }
+      },
+      "functionMode": "property",
+      "required": false
+    },
+    {
+      "identifier": "pir_state_1",
+      "name": "人体红外1",
+      "functionType": "u",
+      "accessMode": "r",
+      "desc": "人体红外 Sensor 状态（true/1 表示有人，false/0 表示无人）",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "true": "1",
+          "false": "0"
+        }
+      },
+      "functionMode": "property",
+      "required": false
+    },
+    {
+      "identifier": "pir_state_2",
+      "name": "人体红外2",
+      "functionType": "u",
+      "accessMode": "r",
+      "desc": "人体红外 Sensor 状态（true/1 表示有人，false/0 表示无人）",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "true": "1",
+          "false": "0"
+        }
+      },
+      "functionMode": "property",
+      "required": false
+    },
+    {
+      "identifier": "pressure_adc_1",
+      "name": "压力传感器1",
+      "functionType": "u",
+      "accessMode": "r",
+      "desc": "压力 Sensor ADC 采样值（用于检测座位压力）",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "max": "4095",
+          "min": "0",
+          "step": "1",
+          "unit": ""
+        }
+      },
+      "functionMode": "property",
+      "required": false
+    },
+    {
+      "identifier": "pressure_adc_2",
+      "name": "压力传感器2",
+      "functionType": "u",
+      "accessMode": "r",
+      "desc": "压力 Sensor ADC 采样值（用于检测座位压力）",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "max": "4095",
+          "min": "0",
+          "step": "1",
+          "unit": ""
+        }
+      },
+      "functionMode": "property",
+      "required": false
+    },
+    {
+      "identifier": "seat_display",
+      "name": "座位OLED屏显示控制",
+      "functionType": "u",
+      "accessMode": "rw",
+      "desc": "表示恢复或清除特定显示状态",
+      "dataType": {
+        "type": "enum",
+        "specs": {
+          "0": "空闲",
+          "1": "已预约",
+          "2": "使用中",
+          "3": "暂离",
+          "4": "异常"
+        }
+      },
+      "functionMode": "property",
+      "required": false
+    }
+  ],
+  "events": [
+    {
+      "identifier": "fake_occupy",
+      "name": "假占座告警事件",
+      "functionType": "u",
+      "eventType": "info",
+      "desc": "",
+      "outputData": [
+        {
+          "identifier": "pressure_adc",
+          "name": "pressure_adc",
+          "dataType": {
+            "type": "int32",
+            "specs": {
+              "max": "4095",
+              "min": "0",
+              "step": "1",
+              "unit": ""
+            }
+          }
+        },
+        {
+          "identifier": "pir_state",
+          "name": "pir_state",
+          "dataType": {
+            "type": "bool",
+            "specs": {
+              "true": "1",
+              "false": "0"
+            }
+          }
+        },
+        {
+          "identifier": "device_id",
+          "name": "device_id",
+          "dataType": {
+            "type": "string",
+            "specs": {
+              "length": 64
+            }
+          }
+        },
+        {
+          "identifier": "timestamp",
+          "name": "timestamp",
+          "dataType": {
+            "type": "date",
+            "specs": {}
+          }
+        },
+        {
+          "identifier": "seat_no",
+          "name": "seat_no",
+          "dataType": {
+            "type": "int32",
+            "specs": {
+              "max": "2",
+              "min": "1",
+              "step": "1",
+              "unit": ""
+            }
+          }
+        }
+      ],
+      "functionMode": "event",
+      "required": false
+    },
+    {
+      "identifier": "rfid_scan",
+      "name": "RFID刷卡事件",
+      "functionType": "u",
+      "eventType": "info",
+      "desc": "RFID 刷卡事件",
+      "outputData": [
+        {
+          "identifier": "rfid_uid",
+          "name": "rfid_uid",
+          "dataType": {
+            "type": "string",
+            "specs": {
+              "length": 64
+            }
+          }
+        },
+        {
+          "identifier": "device_id",
+          "name": "device_id",
+          "dataType": {
+            "type": "string",
+            "specs": {
+              "length": 64
+            }
+          }
+        },
+        {
+          "identifier": "timestamp",
+          "name": "timestamp",
+          "dataType": {
+            "type": "date",
+            "specs": {}
+          }
+        }
+      ],
+      "functionMode": "event",
+      "required": false
+    }
+  ],
+  "services": [
+    {
+      "identifier": "buzzer_ctrl",
+      "name": "蜂鸣器控制",
+      "functionType": "u",
+      "desc": "用于远程测试或控制蜂鸣器响铃",
+      "callType": "async",
+      "input": [
+        {
+          "identifier": "duration_ms",
+          "name": "响铃时长",
+          "dataType": {
+            "type": "int32",
+            "specs": {
+              "max": "65535",
+              "min": "0",
+              "step": "1",
+              "unit": "毫秒 / ms"
+            }
+          }
+        }
+      ],
+      "output": [],
+      "functionMode": "service",
+      "required": false
+    }
+  ],
+  "combs": []
+}

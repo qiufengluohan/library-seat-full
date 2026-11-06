@@ -1,0 +1,67 @@
+<view class="login-page">
+
+  <!-- 顶部品牌区 -->
+  <view class="brand" style="padding-top: {{statusBarHeight + 40}}px">
+    <view class="brand-mask a"></view>
+    <view class="brand-mask b"></view>
+    <view class="brand-inner">
+      <view class="logo">
+        <view class="logo-book b1"></view>
+        <view class="logo-book b2"></view>
+        <view class="logo-book b3"></view>
+      </view>
+      <view class="brand-title">{{appName}}</view>
+      <view class="brand-sub">座位预约与学习管理</view>
+    </view>
+  </view>
+
+  <!-- 登录卡片 -->
+  <view class="login-card">
+    <view class="card-title">学号登录</view>
+    <view class="card-desc">使用学号与密码登录，首次使用请先注册</view>
+
+    <view class="form">
+      <view class="field">
+        <text class="field-label">学号</text>
+        <input
+          class="field-input"
+          type="text"
+          maxlength="32"
+          placeholder="请输入学号"
+          placeholder-class="field-ph"
+          value="{{form.studentNo}}"
+          bindinput="onStudentNoInput"
+        />
+      </view>
+
+      <view class="field">
+        <text class="field-label">密码</text>
+        <input
+          class="field-input"
+          password="{{true}}"
+          maxlength="32"
+          placeholder="请输入密码"
+          placeholder-class="field-ph"
+          value="{{form.password}}"
+          bindinput="onPasswordInput"
+        />
+      </view>
+    </view>
+
+    <button class="btn btn-primary btn-block wx-btn" bindtap="onLogin" disabled="{{submitting}}">
+      {{submitting ? '登录中…' : '登 录'}}
+    </button>
+
+    <view class="to-register">
+      还没有账号？
+      <text class="link" catchtap="goRegister">立即注册</text>
+    </view>
+
+    <view class="agree-text">
+      登录即表示同意
+      <text class="link" catchtap="openAgreement">《用户协议与隐私政策》</text>
+    </view>
+  </view>
+
+  <view class="footer">{{appName}} v{{version}}</view>
+</view>

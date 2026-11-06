@@ -1,0 +1,75 @@
+# ============================================================
+# 机电图书馆 · 座位预约与学习管理（四端统一）仓库根 .gitignore
+# 各子项目已有各自的 .gitignore（library-seat / library-admin 各一份），
+# 这里管跨项目的通用项，以及**绝不能进仓库**的东西。
+# ============================================================
+
+# --- 操作系统 / 编辑器 ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+*.swo
+# .idea/ 里有明文的 MYSQL_PASSWORD 与 ONENET_API_KEY（Run Configuration）
+.idea/
+*.iml
+.vscode/
+
+# --- 构建产物（可重新生成，不进版本库）---
+target/
+build/
+dist/
+out/
+bin/
+*.jar
+*.war
+*.class
+
+# --- 前端依赖（已用 package-lock.json / pom.xml 锁定版本，不提交 node_modules）---
+node_modules/
+
+# --- STM32 / STM32CubeIDE ---
+# .metadata 是 CubeIDE 的**工作区**目录：体积大、含本机绝对路径与会话日志，
+# 由 IDE 自行重建，不属于工程源码。
+library-stm32/.metadata/
+library-stm32/.settings/
+# Debug/ 是构建产物（.o/.d/.su/.elf/.bin/.map + 写死绝对路径的 makefile）
+library-stm32/BiShe/Debug/
+library-stm32/BiShe/Debug.*/
+library-stm32/BiShe/.settings/
+library-stm32/BiShe/*.launch
+library-stm32/BiShe/*.o
+library-stm32/BiShe/*.d
+library-stm32/BiShe/*.su
+library-stm32/BiShe/*.elf
+library-stm32/BiShe/*.map
+library-stm32/BiShe/*.bin
+library-stm32/BiShe/*.hex
+library-stm32/BiShe/*.lst
+
+# --- 密钥 / 本地配置 ---
+# 后端配置只提交 application.yml（值全部走 ${ENV:默认}），本地覆盖文件不进仓库
+library-seat/src/main/resources/application-local.yml
+library-seat/src/main/resources/application-dev.yml
+**/application-local.properties
+**/*.env.local
+**/*.pem
+**/*.key
+**/*.p12
+**/*.jks
+jidian-library/project.private.config.json
+# --- 论文 / 个人材料 / 第三方工具 ---
+# 素材/ 里有：微信 AppSecret 与 OneNET AccessKey 的明文备忘录（草稿.txt）、
+# 开题报告 / 任务书 / 答辩 PPT（含真实姓名与学校信息）、嘉立创工程文件、
+# OneNET 设备导出表、11 MB 的第三方 token 生成工具。整个目录都不进仓库。
+素材/
+
+# --- 日志 / 临时文件 ---
+*.log
+*.tmp
+*.bak
+*.bak-*
+*.orig
+__pycache__/
+*.pyc

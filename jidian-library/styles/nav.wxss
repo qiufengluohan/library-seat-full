@@ -1,0 +1,28 @@
+/* 顶部返回导航（自定义导航栏页面通用） */
+.nav {
+  display: flex; align-items: center;
+  height: 88rpx; padding: 0 16rpx;
+  position: relative;
+  background: #fff;
+}
+.nav-back {
+  width: 64rpx; height: 64rpx;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2;
+}
+.nav-back-arrow {
+  width: 20rpx; height: 20rpx;
+  border-left: 4rpx solid #1B2333;
+  border-bottom: 4rpx solid #1B2333;
+  transform: rotate(45deg);
+  margin-left: 8rpx;
+}
+.nav-title {
+  position: absolute; left: 0; right: 0;
+  text-align: center; font-size: 34rpx; font-weight: 700; color: #1B2333;
+  pointer-events: none;
+}
+.nav-right {
+  margin-left: auto; z-index: 2; font-size: 26rpx; color: #8A94A6;
+  padding-right: 16rpx;
+}

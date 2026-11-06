@@ -1,0 +1,56 @@
+.reg-page { min-height: 100vh; background: var(--bg); }
+
+/* ---------- 自定义导航栏 ---------- */
+.nav { background: linear-gradient(160deg, #5B8CFF, #3A6BF0); }
+.nav-inner {
+  height: 88rpx; display: flex; align-items: center;
+  padding: 0 24rpx;
+}
+.nav-back {
+  width: 64rpx; height: 64rpx;
+  display: flex; align-items: center; justify-content: center;
+}
+.arrow-left {
+  width: 20rpx; height: 20rpx;
+  border-left: 4rpx solid #fff; border-bottom: 4rpx solid #fff;
+  transform: rotate(45deg); margin-left: 8rpx;
+}
+.nav-title {
+  flex: 1; text-align: center;
+  font-size: 32rpx; font-weight: 600; color: #fff;
+}
+/* 占位，让标题在视觉上居中（左右各一个 64rpx 宽的块） */
+.nav-placeholder { width: 64rpx; }
+
+/* ---------- 表单卡片 ---------- */
+.reg-body {
+  margin: 30rpx 40rpx 0;
+  background: #fff; border-radius: 28rpx;
+  padding: 48rpx 40rpx 40rpx;
+  box-shadow: 0 16rpx 44rpx rgba(58, 107, 240, 0.10);
+}
+.card-title { font-size: 38rpx; font-weight: 700; color: var(--text-1); }
+.card-desc { font-size: 24rpx; color: var(--text-3); margin-top: 12rpx; line-height: 1.6; }
+
+.form { margin-top: 40rpx; }
+.field { margin-bottom: 30rpx; }
+.field-label {
+  display: block; font-size: 24rpx; color: var(--text-2);
+  margin-bottom: 14rpx;
+}
+.req { color: #F0554B; }
+.field-input {
+  height: 88rpx; padding: 0 24rpx;
+  background: var(--bg); border-radius: 16rpx;
+  font-size: 28rpx; color: var(--text-1);
+  box-sizing: border-box; width: 100%;
+}
+.field-ph { color: var(--text-4); }
+
+.reg-btn { margin-top: 20rpx; }
+.reg-btn::after { border: none; }
+
+.tip {
+  margin-top: 26rpx;
+  font-size: 21rpx; color: var(--text-4); line-height: 1.7;
+}

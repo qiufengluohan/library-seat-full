@@ -1,0 +1,101 @@
+@import "../../styles/nav.wxss";
+
+.wrap { min-height: 100vh; background: #F4F7FC; }
+.nav-bar { background: #fff; }
+
+/* ---------- 空态（未配置后端 / 请求失败） ---------- */
+.empty-card { text-align: center; padding: 60rpx 32rpx 50rpx; }
+.empty-ico {
+  width: 80rpx; height: 80rpx; border-radius: 50%;
+  background: #FEECEA; color: #C53A30;
+  font-size: 42rpx; font-weight: 700;
+  margin: 0 auto 22rpx;
+  display: flex; align-items: center; justify-content: center;
+}
+.empty-title { font-size: 32rpx; font-weight: 700; color: #1B2333; }
+.empty-desc { font-size: 23rpx; color: #8A94A6; line-height: 1.7; margin-top: 14rpx; text-align: left; }
+.body { padding: 24rpx 28rpx 0; }
+
+/* ---------- 座位卡 ---------- */
+.seat-card {
+  background: #fff; border-radius: 24rpx;
+  border-left: 8rpx solid #3A6BF0;
+  padding: 28rpx 28rpx;
+  box-shadow: 0 8rpx 24rpx rgba(58, 107, 240, 0.06);
+}
+.sc-top { display: flex; align-items: center; justify-content: space-between; }
+.sc-seat { display: flex; align-items: center; min-width: 0; }
+.sc-ico {
+  width: 44rpx; height: 44rpx; border-radius: 12rpx;
+  background: #EBF1FE; position: relative; margin-right: 16rpx; flex-shrink: 0;
+}
+.sc-ico::after {
+  content: ''; position: absolute; left: 12rpx; top: 14rpx;
+  width: 20rpx; height: 6rpx; border-radius: 3rpx; background: #3A6BF0;
+  box-shadow: 0 10rpx 0 #3A6BF0;
+}
+.sc-name { font-size: 32rpx; font-weight: 700; color: #1B2333; }
+.sc-sub { margin-top: 14rpx; font-size: 23rpx; color: #8A94A6; }
+
+/* ---------- 状态主区 ---------- */
+.state-card { text-align: center; padding: 44rpx 32rpx 40rpx; }
+.state-dot {
+  width: 24rpx; height: 24rpx; border-radius: 50%;
+  margin: 0 auto 20rpx;
+}
+.state-label { font-size: 40rpx; font-weight: 700; }
+.state-counter { margin-top: 26rpx; }
+.scn-label { font-size: 22rpx; color: #AAB2C0; }
+.scn-value { font-size: 56rpx; font-weight: 700; color: #1B2333; margin-top: 8rpx; }
+.state-desc { margin-top: 22rpx; font-size: 24rpx; color: #8A94A6; line-height: 1.6; }
+
+/* ---------- RFID 凭证 ---------- */
+.rfid { text-align: center; padding: 16rpx 0 8rpx; }
+.rfid-wave {
+  width: 132rpx; height: 132rpx; border-radius: 50%;
+  background: #EBF1FE; margin: 0 auto;
+  display: flex; align-items: center; justify-content: center;
+}
+.rfid-ico {
+  width: 56rpx; height: 40rpx; border-radius: 8rpx;
+  border: 5rpx solid #3A6BF0; position: relative;
+}
+.rfid-ico::after {
+  content: ''; position: absolute; right: -22rpx; top: 10rpx;
+  width: 16rpx; height: 16rpx; border-radius: 50%; background: #3A6BF0;
+}
+.rfid-uid {
+  margin-top: 22rpx; font-size: 34rpx; font-weight: 700;
+  color: #1B2333; letter-spacing: 6rpx;
+}
+.rfid-tip {
+  margin-top: 18rpx; font-size: 22rpx; color: #8A94A6; line-height: 1.7;
+  text-align: left;
+}
+
+/* ---------- 信息行 ---------- */
+.info-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20rpx 0; border-bottom: 2rpx solid #F2F5FA;
+}
+.info-row:last-child { border-bottom: none; }
+.info-k { font-size: 25rpx; color: #8A94A6; }
+.info-v { font-size: 26rpx; color: #1B2333; font-weight: 600; }
+
+/* ---------- 操作 ---------- */
+.actions { display: flex; margin-top: 32rpx; }
+.actions .btn-block { width: 100%; }
+
+/* ---------- 规则说明 ---------- */
+.rules { margin-top: 24rpx; }
+.rule-item { display: flex; align-items: flex-start; padding: 14rpx 0; }
+.rule-no {
+  width: 34rpx; height: 34rpx; border-radius: 50%;
+  background: #EBF1FE; color: #3A6BF0;
+  font-size: 20rpx; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin-right: 14rpx; flex-shrink: 0; margin-top: 2rpx;
+}
+.rule-txt { font-size: 23rpx; color: #6E7686; line-height: 1.7; flex: 1; }
+
+.holder { height: 80rpx; }
